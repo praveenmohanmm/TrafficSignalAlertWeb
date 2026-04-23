@@ -1,0 +1,224 @@
+@page "/"
+@implements IAsyncDisposable
+@inject GeolocationService GeoService
+@inject TrafficSignalService SignalService
+
+<PageTitle>Traffic Signal Alert</PageTitle>
+
+<div class="tsa-app">
+
+    <!-- ── Header ──────────────────────────────────────────────────────── -->
+    <div class="tsa-header">
+        <h1>Traffic Signal Alert</h1>
+        <p class="tsa-subtitle">Alerts you when approaching a traffic signal</p>
+    </div>
+
+    <!-- ── Alert banner ────────────────────────────────────────────────── -->
+    @if (_isAlertActive)
+    {
+        <div class="tsa-alert @_alertClass">
+            <div class="tsa-alert-title">⚠ SIGNAL NEARBY</div>
+            @foreach (var line in _alertLines)
+            {
+                <div class="tsa-alert-line">@line</div>
+            }
+        </div>
+    }
+
+    <!-- ── Status message ──────────────────────────────────────────────── -->
+    @if (!string.IsNullOrEmpty(_statusMessage))
+    {
+        <div class="tsa-status @(_isError ? "tsa-status--error" : "")">@_statusMessage</div>
+    }
+
+    <!-- ── GPS card ─────────────────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-label">Current Position</div>
+        <div class="tsa-card-value">@_positionText</div>
+        @if (!string.IsNullOrEmpty(_accuracyText))
+        {
+            <div class="tsa-card-sub">@_accuracyText</div>
+        }
+    </div>
+
+    <!-- ── Closest signal card ──────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-row">
+            <div class="tsa-card-label">Nearest Signal</div>
+            <div class="tsa-card-distance">@_closestDistanceText</div>
+        </div>
+        <div class="tsa-card-value">@_closestSignalText</div>
+    </div>
+
+    <!-- ── Alert radius legend ──────────────────────────────────────────── -->
+    <div class="tsa-card tsa-legend">
+        <span>Alert radius: <strong>@TrafficSignalService.AlertRadiusMetres m</strong></span>
+        <span class="tsa-dot green"></span><span>≤100 m</span>
+        <span class="tsa-dot orange"></span><span>≤60 m</span>
+        <span class="tsa-dot red"></span><span>≤30 m</span>
+    </div>
+
+    <!-- ── Nearby signals list ──────────────────────────────────────────── -->
+    @if (_isAlertActive && _nearbySignals.Count > 0)
+    {
+        <div class="tsa-card">
+            <div class="tsa-card-label">Signals within alert radius</div>
+            @foreach (var item in _nearbySignals)
+            {
+                <div class="tsa-nearby-row">
+                    <span class="tsa-nearby-name">@item.Signal.IntersectionName</span>
+                    <span class="tsa-nearby-type">@item.Signal.IntersectionType</span>
+                    <span class="tsa-nearby-dist">@FormatDistance(item.DistanceMetres)</span>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- ── Loaded count ──────────────────────────────────────────────────── -->
+    @if (_signalsLoaded > 0)
+    {
+        <div class="tsa-status">@_signalsLoaded signals loaded</div>
+    }
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="tsa-controls">
+        <button class="tsa-btn tsa-btn--start" @onclick="StartAsync" disabled="@GeoService.IsTracking">
+            Start Tracking
+        </button>
+        <button class="tsa-btn tsa-btn--stop" @onclick="StopAsync" disabled="@(!GeoService.IsTracking)">
+            Stop Tracking
+        </button>
+    </div>
+
+</div>
+
+@code {
+    // ── State ────────────────────────────────────────────────────────────
+    private string _positionText      = "Waiting for GPS…";
+    private string _accuracyText      = string.Empty;
+    private string _closestSignalText = "—";
+    private string _closestDistanceText = "—";
+    private string _statusMessage     = "Tap Start to begin tracking.";
+    private bool   _isError;
+    private bool   _isAlertActive;
+    private string _alertClass        = string.Empty;
+    private List<string> _alertLines  = [];
+    private IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)> _nearbySignals = [];
+    private int _signalsLoaded;
+
+    // ── Lifecycle ────────────────────────────────────────────────────────
+    protected override void OnInitialized()
+    {
+        GeoService.LocationChanged += OnLocationChanged;
+        GeoService.ErrorOccurred   += OnGeoError;
+    }
+
+    // ── Button handlers ──────────────────────────────────────────────────
+    private async Task StartAsync()
+    {
+        _isError = false;
+        _statusMessage = "Requesting GPS permission…";
+        StateHasChanged();
+
+        // Pre-load the signals file so the first GPS hit is instant
+        if (_signalsLoaded == 0)
+        {
+            _statusMessage = "Loading signal data…";
+            StateHasChanged();
+            var signals = await SignalService.LoadSignalsAsync();
+            _signalsLoaded = signals.Count;
+        }
+
+        await GeoService.StartAsync();
+
+        if (GeoService.IsTracking)
+        {
+            _statusMessage = "Tracking active — updates on every GPS fix.";
+        }
+        StateHasChanged();
+    }
+
+    private async Task StopAsync()
+    {
+        await GeoService.StopAsync();
+        _isAlertActive = false;
+        _alertLines    = [];
+        _nearbySignals = [];
+        _statusMessage = "Tracking stopped.";
+        StateHasChanged();
+    }
+
+    // ── Geolocation callbacks (arrive on threadpool → marshal to UI thread) ─
+    private void OnLocationChanged(LocationResult loc)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            _isError       = false;
+            _positionText  = $"{loc.Latitude:F6}° N,  {loc.Longitude:F6}° E";
+            _accuracyText  = $"±{loc.Accuracy:F0} m accuracy";
+
+            await UpdateProximityAsync(loc.Latitude, loc.Longitude);
+            StateHasChanged();
+        });
+    }
+
+    private void OnGeoError(string message)
+    {
+        _ = InvokeAsync(() =>
+        {
+            _isError       = true;
+            _statusMessage = message;
+            _isAlertActive = false;
+            _alertLines    = [];
+            _nearbySignals = [];
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
+    }
+
+    // ── Proximity logic ──────────────────────────────────────────────────
+    private async Task UpdateProximityAsync(double lat, double lon)
+    {
+        var nearby  = await SignalService.GetNearbySignalsAsync(lat, lon);
+        var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
+
+        if (closest is not null)
+        {
+            _closestSignalText   = $"{closest.IntersectionName}  [{closest.IntersectionType}]";
+            _closestDistanceText = FormatDistance(closestDist);
+        }
+
+        _nearbySignals = nearby;
+
+        if (nearby.Count > 0)
+        {
+            var first = nearby[0];
+            _isAlertActive = true;
+            _alertClass    = first.DistanceMetres <= 30  ? "tsa-alert--red"
+                           : first.DistanceMetres <= 60  ? "tsa-alert--orange"
+                                                         : "tsa-alert--green";
+            _alertLines =
+            [
+                first.Signal.IntersectionName,
+                $"{first.Signal.IntersectionType}  ·  {first.Signal.Municipality}",
+                $"{FormatDistance(first.DistanceMetres)} away"
+            ];
+        }
+        else
+        {
+            _isAlertActive = false;
+            _alertLines    = [];
+        }
+    }
+
+    private static string FormatDistance(double m) =>
+        m >= 1000 ? $"{m / 1000:F2} km" : $"{m:F0} m";
+
+    // ── Cleanup ──────────────────────────────────────────────────────────
+    public async ValueTask DisposeAsync()
+    {
+        GeoService.LocationChanged -= OnLocationChanged;
+        GeoService.ErrorOccurred   -= OnGeoError;
+        await GeoService.DisposeAsync();
+    }
+}

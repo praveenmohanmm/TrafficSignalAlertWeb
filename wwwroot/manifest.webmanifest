@@ -1,0 +1,23 @@
+{
+  "name": "Traffic Signal Alert",
+  "short_name": "TSA",
+  "id": "./",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#16213e",
+  "description": "Alerts you when approaching a traffic signal based on your GPS location.",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ]
+}
