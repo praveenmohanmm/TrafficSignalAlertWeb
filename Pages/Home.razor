@@ -50,22 +50,6 @@
         <div class="tsa-status @(_isError ? "tsa-status--error" : "")">@_statusMessage</div>
     }
 
-    <!-- ── GPS card ─────────────────────────────────────────────────────── -->
-    <div class="tsa-card">
-        <div class="tsa-card-label">Current Position</div>
-        <div class="tsa-card-value">@_positionText</div>
-        @if (!string.IsNullOrEmpty(_accuracyText))
-        {
-            <div class="tsa-card-sub">@_accuracyText</div>
-        }
-        @if (!string.IsNullOrEmpty(_speedText))
-        {
-            <div class="tsa-card-sub tsa-speed @(_isMoving ? "tsa-speed--moving" : "tsa-speed--stopped")">
-                @(_isMoving ? "Moving" : "Stopped") · @_speedText
-            </div>
-        }
-    </div>
-
     <!-- ── Closest signal card ──────────────────────────────────────────── -->
     <div class="tsa-card">
         <div class="tsa-card-row">
@@ -73,6 +57,12 @@
             <div class="tsa-card-distance">@_closestDistanceText</div>
         </div>
         <div class="tsa-card-value">@_closestSignalText</div>
+        @if (!string.IsNullOrEmpty(_speedText))
+        {
+            <div class="tsa-card-sub tsa-speed @(_isMoving ? "tsa-speed--moving" : "tsa-speed--stopped")">
+                @(_isMoving ? "Moving" : "Stopped") · @_speedText
+            </div>
+        }
     </div>
 
     <!-- ── Alert radius legend ──────────────────────────────────────────── -->
