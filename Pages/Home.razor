@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @inject GeolocationService GeoService
 @inject TrafficSignalService SignalService
+@inject IJSRuntime JS
 
 <PageTitle>Traffic Signal Alert</PageTitle>
 
@@ -116,6 +117,11 @@
     private IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)> _nearbySignals = [];
     private int _signalsLoaded;
 
+    // ── Audio alert state ────────────────────────────────────────────────
+    private const double AudioAlertMetres   = 50.0;   // beep threshold
+    private const int    BeepCooldownSecs   = 10;     // min gap between beeps
+    private DateTime     _lastBeepUtc       = DateTime.MinValue;
+
     // ── Lifecycle ────────────────────────────────────────────────────────
     protected override void OnInitialized()
     {
@@ -129,6 +135,9 @@
         _isError = false;
         _statusMessage = "Requesting GPS permission…";
         StateHasChanged();
+
+        // Unlock Web Audio API during this user gesture (required on iOS)
+        await JS.InvokeVoidAsync("trafficAudio.unlock");
 
         // Pre-load the signals file so the first GPS hit is instant
         if (_signalsLoaded == 0)
@@ -154,6 +163,7 @@
         _isAlertActive = false;
         _alertLines    = [];
         _nearbySignals = [];
+        _lastBeepUtc   = DateTime.MinValue;
         _statusMessage = "Tracking stopped.";
         StateHasChanged();
     }
@@ -199,6 +209,15 @@
         }
 
         _nearbySignals = nearby;
+
+        // ── Audio alert ──────────────────────────────────────────────────
+        var audioTarget = nearby.FirstOrDefault(s => s.DistanceMetres <= AudioAlertMetres);
+        if (audioTarget != default
+            && (DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
+        {
+            _lastBeepUtc = DateTime.UtcNow;
+            await JS.InvokeVoidAsync("trafficAudio.play", audioTarget.DistanceMetres);
+        }
 
         if (nearby.Count > 0)
         {
