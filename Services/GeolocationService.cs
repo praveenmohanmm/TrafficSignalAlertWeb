@@ -2,7 +2,7 @@ using Microsoft.JSInterop;
 
 namespace TrafficSignalAlertWeb.Services;
 
-public record LocationResult(double Latitude, double Longitude, double Accuracy);
+public record LocationResult(double Latitude, double Longitude, double Accuracy, double Speed);
 
 public class GeolocationService : IAsyncDisposable
 {

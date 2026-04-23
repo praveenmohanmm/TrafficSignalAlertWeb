@@ -47,7 +47,45 @@ window.trafficAudio = (function () {
 })();
 
 window.geolocationInterop = (function () {
-    let watchId = null;
+    let watchId   = null;
+    let _prevLat  = null;
+    let _prevLon  = null;
+    let _prevTime = null;
+
+    // Haversine distance in metres — used as speed fallback when
+    // coords.speed is null (common on desktop browsers and some iOS configs)
+    function haversineM(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const toRad = d => d * Math.PI / 180;
+        const dLat  = toRad(lat2 - lat1);
+        const dLon  = toRad(lon2 - lon1);
+        const a     = Math.sin(dLat / 2) ** 2
+                    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+                    * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function resolveSpeed(pos) {
+        const now  = Date.now();
+        let speed  = pos.coords.speed; // m/s from device, may be null/NaN
+
+        if (speed == null || isNaN(speed) || speed < 0) {
+            // Fall back to displacement ÷ elapsed time between fixes
+            if (_prevLat !== null) {
+                const dt = (now - _prevTime) / 1000; // seconds
+                speed    = dt > 0
+                    ? haversineM(_prevLat, _prevLon, pos.coords.latitude, pos.coords.longitude) / dt
+                    : 0;
+            } else {
+                speed = 0;
+            }
+        }
+
+        _prevLat  = pos.coords.latitude;
+        _prevLon  = pos.coords.longitude;
+        _prevTime = now;
+        return speed;
+    }
 
     return {
         isSupported: function () {
@@ -60,12 +98,15 @@ window.geolocationInterop = (function () {
                 return;
             }
 
+            _prevLat = _prevLon = _prevTime = null; // reset on each start
+
             watchId = navigator.geolocation.watchPosition(
                 function (pos) {
                     dotNetRef.invokeMethodAsync('OnPositionChanged', {
                         latitude:  pos.coords.latitude,
                         longitude: pos.coords.longitude,
-                        accuracy:  pos.coords.accuracy
+                        accuracy:  pos.coords.accuracy,
+                        speed:     resolveSpeed(pos)   // m/s, never null
                     });
                 },
                 function (err) {
@@ -98,6 +139,7 @@ window.geolocationInterop = (function () {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
+            _prevLat = _prevLon = _prevTime = null;
         }
     };
 })();

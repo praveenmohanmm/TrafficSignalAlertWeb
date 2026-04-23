@@ -24,6 +24,14 @@
 
     <div class="tsa-divider"></div>
 
+    <!-- ── Stopped banner (alerts silenced) ───────────────────────────── -->
+    @if (GeoService.IsTracking && !_isMoving && !string.IsNullOrEmpty(_speedText))
+    {
+        <div class="tsa-stopped-banner">
+            🛑 Vehicle stopped — alerts paused
+        </div>
+    }
+
     <!-- ── Alert banner ────────────────────────────────────────────────── -->
     @if (_isAlertActive)
     {
@@ -49,6 +57,12 @@
         @if (!string.IsNullOrEmpty(_accuracyText))
         {
             <div class="tsa-card-sub">@_accuracyText</div>
+        }
+        @if (!string.IsNullOrEmpty(_speedText))
+        {
+            <div class="tsa-card-sub tsa-speed @(_isMoving ? "tsa-speed--moving" : "tsa-speed--stopped")">
+                @(_isMoving ? "Moving" : "Stopped") · @_speedText
+            </div>
         }
     </div>
 
@@ -117,9 +131,13 @@
     private IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)> _nearbySignals = [];
     private int _signalsLoaded;
 
-    // ── Audio alert state ────────────────────────────────────────────────
+    // ── Motion & audio state ─────────────────────────────────────────────
+    /// <summary>Minimum speed in m/s to be considered moving (~5 km/h).</summary>
+    private const double MovingThresholdMs  = 1.4;
     private const double AudioAlertMetres   = 50.0;   // beep threshold
     private const int    BeepCooldownSecs   = 10;     // min gap between beeps
+    private bool         _isMoving;
+    private string       _speedText         = string.Empty;
     private DateTime     _lastBeepUtc       = DateTime.MinValue;
 
     // ── Lifecycle ────────────────────────────────────────────────────────
@@ -173,9 +191,11 @@
     {
         _ = InvokeAsync(async () =>
         {
-            _isError       = false;
-            _positionText  = $"{loc.Latitude:F6}° N,  {loc.Longitude:F6}° E";
-            _accuracyText  = $"±{loc.Accuracy:F0} m accuracy";
+            _isError      = false;
+            _positionText = $"{loc.Latitude:F6}° N,  {loc.Longitude:F6}° E";
+            _accuracyText = $"±{loc.Accuracy:F0} m accuracy";
+            _isMoving     = loc.Speed >= MovingThresholdMs;
+            _speedText    = $"{loc.Speed * 3.6:F0} km/h";
 
             await UpdateProximityAsync(loc.Latitude, loc.Longitude);
             StateHasChanged();
@@ -210,17 +230,9 @@
 
         _nearbySignals = nearby;
 
-        // ── Audio alert ──────────────────────────────────────────────────
-        var audioTarget = nearby.FirstOrDefault(s => s.DistanceMetres <= AudioAlertMetres);
-        if (audioTarget != default
-            && (DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
+        if (_isMoving && nearby.Count > 0)
         {
-            _lastBeepUtc = DateTime.UtcNow;
-            await JS.InvokeVoidAsync("trafficAudio.play", audioTarget.DistanceMetres);
-        }
-
-        if (nearby.Count > 0)
-        {
+            // ── Visual alert ─────────────────────────────────────────────
             var first = nearby[0];
             _isAlertActive = true;
             _alertClass    = first.DistanceMetres <= 30  ? "tsa-alert--red"
@@ -232,6 +244,15 @@
                 $"{first.Signal.IntersectionType}  ·  {first.Signal.Municipality}",
                 $"{FormatDistance(first.DistanceMetres)} away"
             ];
+
+            // ── Audio alert ──────────────────────────────────────────────
+            var audioTarget = nearby.FirstOrDefault(s => s.DistanceMetres <= AudioAlertMetres);
+            if (audioTarget != default
+                && (DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
+            {
+                _lastBeepUtc = DateTime.UtcNow;
+                await JS.InvokeVoidAsync("trafficAudio.play", audioTarget.DistanceMetres);
+            }
         }
         else
         {
