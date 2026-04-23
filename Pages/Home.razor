@@ -147,6 +147,9 @@
         // Unlock Web Audio API during this user gesture (required on iOS)
         await JS.InvokeVoidAsync("trafficAudio.unlock");
 
+        // Keep screen on so the browser doesn't suspend GPS
+        await JS.InvokeVoidAsync("wakeLock.request");
+
         // Pre-load the signals file so the first GPS hit is instant
         if (_signalsLoaded == 0)
         {
@@ -168,6 +171,7 @@
     private async Task StopAsync()
     {
         await GeoService.StopAsync();
+        await JS.InvokeVoidAsync("wakeLock.release");
         _isAlertActive = false;
         _alertLines    = [];
         _nearbySignals = [];

@@ -46,6 +46,37 @@ window.trafficAudio = (function () {
     };
 })();
 
+/* ── Screen Wake Lock ────────────────────────────────────────────────
+   Keeps the screen on while tracking so the browser doesn't suspend.
+   Automatically re-acquires if the user switches apps and comes back.
+─────────────────────────────────────────────────────────────────────── */
+window.wakeLock = (function () {
+    let _lock = null;
+
+    async function acquire() {
+        if (!('wakeLock' in navigator)) return;
+        try {
+            _lock = await navigator.wakeLock.request('screen');
+            // Re-acquire when the page becomes visible again (e.g. after tab switch)
+            _lock.addEventListener('release', () => { _lock = null; });
+        } catch (e) { console.warn('Wake lock failed:', e); }
+    }
+
+    // If the page was hidden and is now visible again, re-acquire
+    document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && _lock === null) {
+            await acquire();
+        }
+    });
+
+    return {
+        request: acquire,
+        release: async function () {
+            if (_lock) { await _lock.release(); _lock = null; }
+        }
+    };
+})();
+
 window.geolocationInterop = (function () {
     let watchId   = null;
     let _prevLat  = null;
