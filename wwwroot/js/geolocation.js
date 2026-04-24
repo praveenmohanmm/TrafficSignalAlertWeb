@@ -159,7 +159,7 @@ window.geolocationInterop = (function () {
                 },
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 5000,
+                    maximumAge: 1000,
                     timeout: 15000
                 }
             );

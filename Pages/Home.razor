@@ -10,19 +10,9 @@
 
     <!-- ── Header ──────────────────────────────────────────────────────── -->
     <div class="tsa-header">
-        <!-- live traffic light — lens lights up to match alert state -->
-        <div class="tsa-traffic-light">
-            <div class="tl-housing">
-                <div class="tl-lens tl-red   @(_alertClass == "tsa-alert--red"    ? "tl-on" : "")"></div>
-                <div class="tl-lens tl-amber @(_alertClass == "tsa-alert--orange" ? "tl-on" : "")"></div>
-                <div class="tl-lens tl-green @(GeoService.IsTracking && !_isAlertActive ? "tl-on" : "")"></div>
-            </div>
-        </div>
         <h1>Traffic Signal Alert</h1>
         <p class="tsa-subtitle">Alerts you when approaching a traffic signal</p>
     </div>
-
-    <div class="tsa-divider"></div>
 
     <!-- ── Stopped banner (alerts silenced) ───────────────────────────── -->
     @if (GeoService.IsTracking && !_isMoving && !string.IsNullOrEmpty(_speedText))
@@ -36,7 +26,7 @@
     @if (_isAlertActive)
     {
         <div class="tsa-alert @_alertClass">
-            <div class="tsa-alert-title">🚦 SIGNAL NEARBY</div>
+            <div class="tsa-alert-title">⚠ SIGNAL NEARBY</div>
             @foreach (var line in _alertLines)
             {
                 <div class="tsa-alert-line">@line</div>

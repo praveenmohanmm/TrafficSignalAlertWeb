@@ -1,377 +1,185 @@
-/* ═══════════════════════════════════════════════════════════════════════
-   Traffic Signal Alert — Road & Traffic-Light Theme
-═══════════════════════════════════════════════════════════════════════ */
-
-:root {
-  /* traffic light lens colours */
-  --tl-red:        #ff3b30;
-  --tl-amber:      #ff9f0a;
-  --tl-green:      #30d158;
-  --tl-red-dim:    #2a0806;
-  --tl-amber-dim:  #2a1800;
-  --tl-green-dim:  #082210;
-
-  /* road / surface palette */
-  --road-bg:       #0c0d0f;
-  --road-card:     #181a1e;
-  --road-card-alt: #131417;
-  --road-border:   #2a2d34;
-  --road-line:     #f9a825;   /* dashed centre-line yellow */
-
-  /* type */
-  --text-main:     #edf0f5;
-  --text-dim:      #757d8a;
-  --text-accent:   #f9a825;
-
-  /* sign green (highway sign) */
-  --sign-bg:       #143320;
-  --sign-border:   #2d6a4f;
-}
-
-/* ── Reset ──────────────────────────────────────────────────────────── */
+/* ── Reset & base ───────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Page background — asphalt + dashed centre line ─────────────────── */
 html, body {
-  height: 100%;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background-color: var(--road-bg);
-  color: var(--text-main);
-  /* dashed yellow centre line down the page */
-  background-image: repeating-linear-gradient(
-    180deg,
-    transparent       0px,
-    transparent       36px,
-    rgba(249,168,37,.20) 36px,
-    rgba(249,168,37,.20) 60px
-  );
-  background-size: 3px 60px;
-  background-position: 50% 0;
-  background-attachment: fixed;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0ff;
 }
 
 /* ── App shell ──────────────────────────────────────────────────────── */
 .tsa-app {
-  max-width: 520px;
-  margin: 0 auto;
-  padding: 28px 16px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-/* ── Traffic-light housing (header decoration) ──────────────────────── */
-.tsa-traffic-light {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-.tl-housing {
-  background: #111316;
-  border: 3px solid #2a2d34;
-  border-radius: 16px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04);
-}
-.tl-lens {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  transition: background .35s, box-shadow .35s;
-  border: 2px solid rgba(0,0,0,.4);
-}
-.tl-lens.tl-red   { background: var(--tl-red-dim); }
-.tl-lens.tl-amber { background: var(--tl-amber-dim); }
-.tl-lens.tl-green { background: var(--tl-green-dim); }
-
-.tl-lens.tl-red.tl-on {
-  background: var(--tl-red);
-  box-shadow: 0 0 14px 5px rgba(255,59,48,.65);
-}
-.tl-lens.tl-amber.tl-on {
-  background: var(--tl-amber);
-  box-shadow: 0 0 14px 5px rgba(255,159,10,.65);
-}
-.tl-lens.tl-green.tl-on {
-  background: var(--tl-green);
-  box-shadow: 0 0 14px 5px rgba(48,209,88,.65);
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 32px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
 .tsa-header { text-align: center; }
-.tsa-header h1 {
-  font-size: 1.75rem;
-  font-weight: 800;
-  letter-spacing: .01em;
-  color: var(--text-main);
-  text-shadow: 0 2px 8px rgba(0,0,0,.6);
-}
-.tsa-subtitle {
-  font-size: 0.82rem;
-  color: var(--text-dim);
-  margin-top: 4px;
-  letter-spacing: .03em;
-  text-transform: uppercase;
+.tsa-header h1 { font-size: 1.75rem; font-weight: 700; color: #e0e0ff; }
+.tsa-subtitle  { font-size: 0.85rem; color: #9090b0; margin-top: 4px; }
+
+/* ── Stopped banner ─────────────────────────────────────────────────── */
+.tsa-stopped-banner {
+    background: #1e1e3a;
+    border: 1px solid #3a3a5a;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    color: #7070a0;
+    text-align: center;
 }
 
 /* ── Alert banner ───────────────────────────────────────────────────── */
 .tsa-alert {
-  border-radius: 10px;
-  padding: 16px 20px;
-  text-align: center;
-  border: 2px solid transparent;
-  position: relative;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    animation: pulse 1.8s ease-in-out infinite;
 }
-.tsa-alert--green {
-  background: rgba(48,209,88,.12);
-  border-color: var(--tl-green);
-  box-shadow: 0 0 24px rgba(48,209,88,.25), inset 0 0 16px rgba(48,209,88,.06);
-}
-.tsa-alert--orange {
-  background: rgba(255,159,10,.12);
-  border-color: var(--tl-amber);
-  animation: amber-flash 1.1s ease-in-out infinite;
-}
-.tsa-alert--red {
-  background: rgba(255,59,48,.13);
-  border-color: var(--tl-red);
-  animation: red-pulse .85s ease-in-out infinite;
-}
-
-@keyframes amber-flash {
-  0%, 100% { box-shadow: 0 0 18px rgba(255,159,10,.25), inset 0 0 12px rgba(255,159,10,.05); }
-  50%       { box-shadow: 0 0 40px rgba(255,159,10,.55), inset 0 0 24px rgba(255,159,10,.12); }
-}
-@keyframes red-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(255,59,48,.35), inset 0 0 14px rgba(255,59,48,.08); }
-  50%       { box-shadow: 0 0 44px rgba(255,59,48,.65), inset 0 0 28px rgba(255,59,48,.15); }
-}
+.tsa-alert--green  { background: #388e3c; }
+.tsa-alert--orange { background: #f57c00; }
+.tsa-alert--red    { background: #d32f2f; }
 
 .tsa-alert-title {
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: #fff;
-  margin-bottom: 7px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
 }
-.tsa-alert-line {
-  font-size: 0.88rem;
-  color: rgba(255,255,255,.9);
-  line-height: 1.55;
+.tsa-alert-line { font-size: 0.9rem; color: rgba(255,255,255,.92); line-height: 1.5; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .82; }
 }
 
-/* ── Card — styled like a road sign panel ───────────────────────────── */
+/* ── Card ───────────────────────────────────────────────────────────── */
 .tsa-card {
-  background: var(--road-card);
-  border: 1px solid var(--road-border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  /* subtle top-edge sheen like a reflective sign */
-  background-image: linear-gradient(180deg, rgba(255,255,255,.03) 0%, transparent 40%);
-  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    background: #16213e;
+    border-radius: 12px;
+    padding: 14px 16px;
 }
+.tsa-card-label { font-size: 0.75rem; font-weight: 600; color: #9090b0; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.tsa-card-value { font-size: 1rem; font-weight: 600; color: #e0e0ff; line-height: 1.4; }
+.tsa-card-sub   { font-size: 0.78rem; color: #7070a0; margin-top: 4px; }
 
-.tsa-card-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  margin-bottom: 6px;
-}
-.tsa-card-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-main);
-  line-height: 1.4;
-}
-.tsa-card-sub {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  margin-top: 4px;
-}
 .tsa-card-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
 }
-.tsa-card-distance {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--road-line);
-}
-
-/* ── Legend — highway sign style ────────────────────────────────────── */
-.tsa-legend {
-  background: var(--sign-bg) !important;
-  border-color: var(--sign-border) !important;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  font-size: 0.8rem;
-  color: #a8d5b5;
-}
-.tsa-legend strong {
-  color: #fff;
-}
-.tsa-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  display: inline-block;
-  border: 1px solid rgba(0,0,0,.3);
-}
-.tsa-dot.green  { background: var(--tl-green); box-shadow: 0 0 5px rgba(48,209,88,.5); }
-.tsa-dot.orange { background: var(--tl-amber); box-shadow: 0 0 5px rgba(255,159,10,.5); }
-.tsa-dot.red    { background: var(--tl-red);   box-shadow: 0 0 5px rgba(255,59,48,.5); }
-
-/* ── Nearby signals list ────────────────────────────────────────────── */
-.tsa-nearby-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--road-border);
-  font-size: 0.85rem;
-}
-.tsa-nearby-row:last-child { border-bottom: none; }
-.tsa-nearby-name { flex: 1 1 auto; color: var(--text-main); }
-.tsa-nearby-type {
-  background: var(--road-card-alt);
-  color: var(--text-dim);
-  border: 1px solid var(--road-border);
-  border-radius: 4px;
-  padding: 1px 7px;
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-.tsa-nearby-dist {
-  color: var(--road-line);
-  font-weight: 700;
-  white-space: nowrap;
-  margin-left: auto;
-}
-
-/* ── Stopped banner ─────────────────────────────────────────────────── */
-.tsa-stopped-banner {
-  background: #1a1a1a;
-  border: 1px solid #3a3f47;
-  border-left: 3px solid #757d8a;
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 0.82rem;
-  color: #757d8a;
-  text-align: center;
-  letter-spacing: .02em;
-}
+.tsa-card-distance { font-size: 1rem; font-weight: 700; color: #ffd700; }
 
 /* ── Speed indicator ─────────────────────────────────────────────────── */
 .tsa-speed          { font-size: 0.78rem; margin-top: 5px; font-weight: 600; }
-.tsa-speed--moving  { color: var(--tl-green); }
-.tsa-speed--stopped { color: var(--text-dim); }
+.tsa-speed--moving  { color: #66bb6a; }
+.tsa-speed--stopped { color: #7070a0; }
+
+/* ── Legend ─────────────────────────────────────────────────────────── */
+.tsa-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    font-size: 0.8rem;
+    color: #9090b0;
+}
+.tsa-legend strong { color: #64b5f6; }
+.tsa-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.tsa-dot.green  { background: #388e3c; }
+.tsa-dot.orange { background: #f57c00; }
+.tsa-dot.red    { background: #d32f2f; }
+
+/* ── Nearby signals list ────────────────────────────────────────────── */
+.tsa-nearby-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px solid #1e2a4a;
+    font-size: 0.85rem;
+}
+.tsa-nearby-row:last-child { border-bottom: none; }
+.tsa-nearby-name { flex: 1 1 auto; color: #c0c0e0; }
+.tsa-nearby-type { background: #1a1a2e; color: #9090b0; border-radius: 4px; padding: 1px 6px; font-size: 0.75rem; white-space: nowrap; }
+.tsa-nearby-dist { color: #ffd700; font-weight: 600; white-space: nowrap; margin-left: auto; }
 
 /* ── Status line ────────────────────────────────────────────────────── */
-.tsa-status        { font-size: 0.78rem; color: var(--text-dim); text-align: center; }
-.tsa-status--error { color: #ff6b6b; }
+.tsa-status        { font-size: 0.78rem; color: #707090; text-align: center; }
+.tsa-status--error { color: #ef9a9a; }
 
 /* ── Controls ───────────────────────────────────────────────────────── */
 .tsa-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
 }
 .tsa-btn {
-  padding: 14px;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: box-shadow .2s, transform .1s, opacity .15s;
-  color: #fff;
-  border: 2px solid transparent;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+    color: #fff;
 }
-.tsa-btn:active  { transform: scale(.96); }
-.tsa-btn:disabled { opacity: .3; cursor: not-allowed; transform: none; }
-
-.tsa-btn--start {
-  background: linear-gradient(160deg, #1a5c22, #2e7d32);
-  border-color: var(--tl-green);
-  box-shadow: 0 0 10px rgba(48,209,88,.25);
-}
-.tsa-btn--start:not(:disabled):hover {
-  box-shadow: 0 0 22px rgba(48,209,88,.5);
-}
-
-.tsa-btn--stop {
-  background: linear-gradient(160deg, #7f1010, #c62828);
-  border-color: var(--tl-red);
-  box-shadow: 0 0 10px rgba(255,59,48,.25);
-}
-.tsa-btn--stop:not(:disabled):hover {
-  box-shadow: 0 0 22px rgba(255,59,48,.5);
-}
-
-/* ── Road-stripe divider (decorative) ───────────────────────────────── */
-.tsa-divider {
-  height: 2px;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--road-line) 0px, var(--road-line) 20px,
-    transparent 20px, transparent 36px
-  );
-  opacity: .35;
-  border-radius: 1px;
-}
+.tsa-btn:active   { transform: scale(.97); }
+.tsa-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+.tsa-btn--start   { background: #388e3c; }
+.tsa-btn--stop    { background: #c62828; }
 
 /* ── Blazor loading progress ────────────────────────────────────────── */
 .loading-progress {
-  position: relative;
-  display: block;
-  width: 8rem;
-  height: 8rem;
-  margin: 20vh auto 1rem;
+    position: relative;
+    display: block;
+    width: 8rem;
+    height: 8rem;
+    margin: 20vh auto 1rem;
 }
 .loading-progress circle {
-  fill: none;
-  stroke: #2a2d34;
-  stroke-width: 0.6rem;
-  transform-origin: 50% 50%;
-  transform: rotate(-90deg);
+    fill: none;
+    stroke: #e0e0ff;
+    stroke-width: 0.6rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
 }
 .loading-progress circle:last-child {
-  stroke: var(--tl-amber);
-  stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
-  transition: stroke-dasharray 0.05s ease-in-out;
+    stroke: #64b5f6;
+    stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+    transition: stroke-dasharray 0.05s ease-in-out;
 }
 .loading-progress-text::after {
-  content: var(--blazor-load-percentage-text, "Loading");
-  color: var(--text-dim);
-  display: block;
-  text-align: center;
-  font-size: 0.85rem;
+    content: var(--blazor-load-percentage-text, "Loading");
+    color: #9090b0;
+    display: block;
+    text-align: center;
+    font-size: 0.85rem;
 }
 
 /* ── Blazor error UI ────────────────────────────────────────────────── */
 #blazor-error-ui {
-  background: #7f1010;
-  border-top: 2px solid var(--tl-red);
-  bottom: 0; left: 0;
-  box-shadow: 0 -2px 12px rgba(255,59,48,.4);
-  display: none;
-  padding: 0.6rem 1.25rem 0.7rem;
-  position: fixed;
-  width: 100%;
-  z-index: 1000;
-  color: #fff;
-  font-size: 0.85rem;
+    background: #c62828;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0,0,0,.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    color: #fff;
+    font-size: 0.85rem;
 }
 #blazor-error-ui .dismiss { cursor: pointer; float: right; font-size: 1.1rem; }
