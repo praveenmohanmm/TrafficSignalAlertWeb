@@ -27,9 +27,7 @@ public class TrafficSignalService
         );
 
         _signals = collection?.Features
-            .Where(f => f.Geometry is not null
-                     && string.Equals(f.Properties.LifeStatus, "Active",
-                                      StringComparison.OrdinalIgnoreCase))
+            .Where(f => f.Geometry is not null)
             .Select(MapFeature)
             .ToList() ?? [];
 
