@@ -92,9 +92,10 @@ window.geolocationInterop = (function () {
             _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
     }
 
-    // Switch between 2 Hz (≤ 50 km/h) and 3 Hz (> 50 km/h) on the fly
+    // 3 Hz (333 ms) when 60–100 km/h, 2 Hz (500 ms) for all other speeds
     function adjustInterval(speedMs) {
-        const needed = (speedMs * 3.6 > 50) ? 333 : 500;
+        const kmh    = speedMs * 3.6;
+        const needed = (kmh >= 60 && kmh <= 100) ? 333 : 500;
         if (needed !== _intervalMs) {
             _intervalMs = needed;
             clearInterval(_intervalId);

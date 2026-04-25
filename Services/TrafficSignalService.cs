@@ -7,9 +7,17 @@ namespace TrafficSignalAlertWeb.Services;
 
 public class TrafficSignalService
 {
-    public const double NormalRadiusMetres   = 100.0;
-    public const double HighSpeedRadiusMetres = 200.0;
-    public const double HighSpeedThresholdKmh = 50.0;
+    /// <summary>
+    /// Returns the alert radius in metres for the given speed, or null if
+    /// alerts should be suppressed (speed below 17 km/h or above 100 km/h).
+    /// </summary>
+    public static double? GetAlertRadius(double speedKmh)
+    {
+        if (speedKmh < 17 || speedKmh > 100) return null;
+        if (speedKmh < 50)  return 250;   // 17–50 km/h
+        if (speedKmh < 60)  return 300;   // 50–60 km/h
+        return 350;                        // 60–100 km/h
+    }
 
     private readonly HttpClient _http;
     private List<TrafficSignal>? _signals;

@@ -14,11 +14,18 @@
         <p class="tsa-subtitle">Alerts you when approaching a traffic signal</p>
     </div>
 
-    <!-- ── Stopped banner (alerts silenced) ───────────────────────────── -->
-    @if (GeoService.IsTracking && !_isMoving && !string.IsNullOrEmpty(_speedText))
+    <!-- ── Out-of-range banner (alerts silenced) ──────────────────────── -->
+    @if (GeoService.IsTracking && AlertRadius is null && !string.IsNullOrEmpty(_speedText))
     {
         <div class="tsa-stopped-banner">
-            🛑 Vehicle stopped — alerts paused
+            @if (SpeedKmh < 17)
+            {
+                <span>🛑 Too slow — alerts paused (&lt; 17 km/h)</span>
+            }
+            else
+            {
+                <span>⚠ Speed too high — alerts paused (&gt; 100 km/h)</span>
+            }
         </div>
     }
 
@@ -57,8 +64,8 @@
 
     <!-- ── Alert radius legend ──────────────────────────────────────────── -->
     <div class="tsa-card tsa-legend">
-        <span>Alert radius: <strong>@AlertRadius m</strong></span>
-        <span class="tsa-dot green"></span><span>≤@AlertRadius m</span>
+        <span>Alert radius: <strong>@(AlertRadius is null ? "—" : $"{AlertRadius} m")</strong></span>
+        <span class="tsa-dot green"></span><span>≤@(AlertRadius?.ToString() ?? "—") m</span>
         <span class="tsa-dot orange"></span><span>≤60 m</span>
         <span class="tsa-dot red"></span><span>≤30 m</span>
     </div>
@@ -121,10 +128,9 @@
     private string       _speedText         = string.Empty;
     private DateTime     _lastBeepUtc       = DateTime.MinValue;
 
-    /// <summary>200 m when over 50 km/h, 100 m otherwise.</summary>
-    private double AlertRadius => _speedMs * 3.6 > TrafficSignalService.HighSpeedThresholdKmh
-        ? TrafficSignalService.HighSpeedRadiusMetres
-        : TrafficSignalService.NormalRadiusMetres;
+    private double SpeedKmh => _speedMs * 3.6;
+    /// <summary>Null when speed is out of the alertable range (< 17 or > 100 km/h).</summary>
+    private double? AlertRadius => TrafficSignalService.GetAlertRadius(SpeedKmh);
 
     // ── Lifecycle ────────────────────────────────────────────────────────
     protected override void OnInitialized()
@@ -210,20 +216,29 @@
     // ── Proximity logic ──────────────────────────────────────────────────
     private async Task UpdateProximityAsync(double lat, double lon)
     {
-        var nearby  = await SignalService.GetNearbySignalsAsync(lat, lon, AlertRadius);
-        var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
+        var radius = AlertRadius;
 
+        var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
         if (closest is not null)
         {
             _closestSignalText   = $"{closest.IntersectionName}  [{closest.IntersectionType}]";
             _closestDistanceText = FormatDistance(closestDist);
         }
 
+        // Suppress all alerts when speed is outside the 17–100 km/h window
+        if (radius is null)
+        {
+            _isAlertActive = false;
+            _alertLines    = [];
+            _nearbySignals = [];
+            return;
+        }
+
+        var nearby = await SignalService.GetNearbySignalsAsync(lat, lon, radius.Value);
         _nearbySignals = nearby;
 
-        if (_isMoving && nearby.Count > 0)
+        if (nearby.Count > 0)
         {
-            // ── Visual alert ─────────────────────────────────────────────
             var first = nearby[0];
             _isAlertActive = true;
             _alertClass    = first.DistanceMetres <= 30  ? "tsa-alert--red"
