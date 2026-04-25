@@ -78,10 +78,13 @@ window.wakeLock = (function () {
 })();
 
 window.geolocationInterop = (function () {
-    let watchId   = null;
-    let _prevLat  = null;
-    let _prevLon  = null;
-    let _prevTime = null;
+    let watchId    = null;
+    let _intervalId = null;
+    let _dotNetRef = null;
+    let _lastPos   = null;
+    let _prevLat   = null;
+    let _prevLon   = null;
+    let _prevTime  = null;
 
     // Haversine distance in metres — used as speed fallback when
     // coords.speed is null (common on desktop browsers and some iOS configs)
@@ -129,16 +132,27 @@ window.geolocationInterop = (function () {
                 return;
             }
 
-            _prevLat = _prevLon = _prevTime = null; // reset on each start
+            _dotNetRef = dotNetRef;
+            _prevLat = _prevLon = _prevTime = null;
+            _lastPos = null;
+
+            // Re-send the last known position twice per second so proximity
+            // is checked at 2 Hz even when the device GPS fires at 1 Hz.
+            _intervalId = setInterval(function () {
+                if (_lastPos && _dotNetRef) {
+                    _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
+                }
+            }, 500);
 
             watchId = navigator.geolocation.watchPosition(
                 function (pos) {
-                    dotNetRef.invokeMethodAsync('OnPositionChanged', {
+                    _lastPos = {
                         latitude:  pos.coords.latitude,
                         longitude: pos.coords.longitude,
                         accuracy:  pos.coords.accuracy,
-                        speed:     resolveSpeed(pos)   // m/s, never null
-                    });
+                        speed:     resolveSpeed(pos)
+                    };
+                    _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
                 },
                 function (err) {
                     let msg;
@@ -166,10 +180,10 @@ window.geolocationInterop = (function () {
         },
 
         stopWatching: function () {
-            if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-            }
+            if (_intervalId !== null) { clearInterval(_intervalId); _intervalId = null; }
+            if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+            _dotNetRef = null;
+            _lastPos   = null;
             _prevLat = _prevLon = _prevTime = null;
         }
     };

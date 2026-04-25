@@ -57,8 +57,8 @@
 
     <!-- ── Alert radius legend ──────────────────────────────────────────── -->
     <div class="tsa-card tsa-legend">
-        <span>Alert radius: <strong>@TrafficSignalService.AlertRadiusMetres m</strong></span>
-        <span class="tsa-dot green"></span><span>≤100 m</span>
+        <span>Alert radius: <strong>@AlertRadius m</strong></span>
+        <span class="tsa-dot green"></span><span>≤@AlertRadius m</span>
         <span class="tsa-dot orange"></span><span>≤60 m</span>
         <span class="tsa-dot red"></span><span>≤30 m</span>
     </div>
@@ -114,11 +114,17 @@
     // ── Motion & audio state ─────────────────────────────────────────────
     /// <summary>Minimum speed in m/s to be considered moving (~5 km/h).</summary>
     private const double MovingThresholdMs  = 1.4;
-    private const double AudioAlertMetres   = 50.0;   // beep threshold
-    private const int    BeepCooldownSecs   = 10;     // min gap between beeps
+    private const double AudioAlertMetres   = 50.0;
+    private const int    BeepCooldownSecs   = 10;
     private bool         _isMoving;
+    private double       _speedMs;
     private string       _speedText         = string.Empty;
     private DateTime     _lastBeepUtc       = DateTime.MinValue;
+
+    /// <summary>200 m when over 50 km/h, 100 m otherwise.</summary>
+    private double AlertRadius => _speedMs * 3.6 > TrafficSignalService.HighSpeedThresholdKmh
+        ? TrafficSignalService.HighSpeedRadiusMetres
+        : TrafficSignalService.NormalRadiusMetres;
 
     // ── Lifecycle ────────────────────────────────────────────────────────
     protected override void OnInitialized()
@@ -178,6 +184,7 @@
             _isError      = false;
             _positionText = $"{loc.Latitude:F6}° N,  {loc.Longitude:F6}° E";
             _accuracyText = $"±{loc.Accuracy:F0} m accuracy";
+            _speedMs      = loc.Speed;
             _isMoving     = loc.Speed >= MovingThresholdMs;
             _speedText    = $"{loc.Speed * 3.6:F0} km/h";
 
@@ -203,7 +210,7 @@
     // ── Proximity logic ──────────────────────────────────────────────────
     private async Task UpdateProximityAsync(double lat, double lon)
     {
-        var nearby  = await SignalService.GetNearbySignalsAsync(lat, lon);
+        var nearby  = await SignalService.GetNearbySignalsAsync(lat, lon, AlertRadius);
         var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
 
         if (closest is not null)
@@ -225,7 +232,7 @@
             _alertLines =
             [
                 first.Signal.IntersectionName,
-                $"{first.Signal.IntersectionType}  ·  {first.Signal.Municipality}",
+                first.Signal.IntersectionType,
                 $"{FormatDistance(first.DistanceMetres)} away"
             ];
 

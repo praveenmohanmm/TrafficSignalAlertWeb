@@ -7,7 +7,9 @@ namespace TrafficSignalAlertWeb.Services;
 
 public class TrafficSignalService
 {
-    public const double AlertRadiusMetres = 100.0;
+    public const double NormalRadiusMetres   = 100.0;
+    public const double HighSpeedRadiusMetres = 200.0;
+    public const double HighSpeedThresholdKmh = 50.0;
 
     private readonly HttpClient _http;
     private List<TrafficSignal>? _signals;
@@ -35,12 +37,12 @@ public class TrafficSignalService
     }
 
     public async Task<IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)>>
-        GetNearbySignalsAsync(double latitude, double longitude)
+        GetNearbySignalsAsync(double latitude, double longitude, double radiusMetres)
     {
         var signals = await LoadSignalsAsync();
         return signals
             .Select(s => (Signal: s, Distance: HaversineMetres(latitude, longitude, s.Latitude, s.Longitude)))
-            .Where(x => x.Distance <= AlertRadiusMetres)
+            .Where(x => x.Distance <= radiusMetres)
             .OrderBy(x => x.Distance)
             .ToList();
     }
