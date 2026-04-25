@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- App background -->
+  <rect width="100" height="100" rx="18" fill="#1a1a2e"/>
+
+  <!-- Traffic light housing -->
+  <rect x="29" y="7" width="42" height="76" rx="11" fill="#111827"/>
+  <rect x="31" y="9" width="38" height="72" rx="9"  fill="#0d1117"/>
+
+  <!-- Pole base -->
+  <rect x="45" y="83" width="10" height="11" rx="2" fill="#1e2a4a"/>
+
+  <!-- Red lens (off) -->
+  <circle cx="50" cy="26" r="10" fill="#3a0806"/>
+  <circle cx="50" cy="26" r="7"  fill="#5a1008"/>
+
+  <!-- Amber lens (off) -->
+  <circle cx="50" cy="47" r="10" fill="#2a1800"/>
+  <circle cx="50" cy="47" r="7"  fill="#3a2200"/>
+
+  <!-- Green lens (ON — glowing) -->
+  <circle cx="50" cy="68" r="13" fill="#0a2a10" opacity="0.5"/>
+  <circle cx="50" cy="68" r="10" fill="#30d158"/>
+  <!-- specular highlight -->
+  <circle cx="47" cy="65" r="3.5" fill="white" opacity="0.25"/>
+</svg>
