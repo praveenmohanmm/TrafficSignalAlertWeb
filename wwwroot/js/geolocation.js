@@ -78,13 +78,29 @@ window.wakeLock = (function () {
 })();
 
 window.geolocationInterop = (function () {
-    let watchId    = null;
+    let watchId     = null;
     let _intervalId = null;
-    let _dotNetRef = null;
-    let _lastPos   = null;
-    let _prevLat   = null;
-    let _prevLon   = null;
-    let _prevTime  = null;
+    let _intervalMs = 500;   // current interval delay
+    let _dotNetRef  = null;
+    let _lastPos    = null;
+    let _prevLat    = null;
+    let _prevLon    = null;
+    let _prevTime   = null;
+
+    function sendLastPos() {
+        if (_lastPos && _dotNetRef)
+            _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
+    }
+
+    // Switch between 2 Hz (≤ 50 km/h) and 3 Hz (> 50 km/h) on the fly
+    function adjustInterval(speedMs) {
+        const needed = (speedMs * 3.6 > 50) ? 333 : 500;
+        if (needed !== _intervalMs) {
+            _intervalMs = needed;
+            clearInterval(_intervalId);
+            _intervalId = setInterval(sendLastPos, _intervalMs);
+        }
+    }
 
     // Haversine distance in metres — used as speed fallback when
     // coords.speed is null (common on desktop browsers and some iOS configs)
@@ -136,22 +152,20 @@ window.geolocationInterop = (function () {
             _prevLat = _prevLon = _prevTime = null;
             _lastPos = null;
 
-            // Re-send the last known position twice per second so proximity
-            // is checked at 2 Hz even when the device GPS fires at 1 Hz.
-            _intervalId = setInterval(function () {
-                if (_lastPos && _dotNetRef) {
-                    _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
-                }
-            }, 500);
+            // Start at 2 Hz; adjustInterval() will switch to 3 Hz if speed > 50 km/h
+            _intervalMs = 500;
+            _intervalId = setInterval(sendLastPos, _intervalMs);
 
             watchId = navigator.geolocation.watchPosition(
                 function (pos) {
+                    const speed = resolveSpeed(pos);
                     _lastPos = {
                         latitude:  pos.coords.latitude,
                         longitude: pos.coords.longitude,
                         accuracy:  pos.coords.accuracy,
-                        speed:     resolveSpeed(pos)
+                        speed:     speed
                     };
+                    adjustInterval(speed);          // update scan rate if speed crossed threshold
                     _dotNetRef.invokeMethodAsync('OnPositionChanged', _lastPos);
                 },
                 function (err) {
