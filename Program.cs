@@ -12,5 +12,6 @@ builder.Services.AddScoped(sp =>
 
 builder.Services.AddScoped<TrafficSignalService>();
 builder.Services.AddScoped<GeolocationService>();
+builder.Services.AddSingleton<AlertSettingsService>();
 
 await builder.Build().RunAsync();

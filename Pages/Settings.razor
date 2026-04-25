@@ -1,0 +1,163 @@
+@page "/settings"
+@inject AlertSettingsService SettingsService
+@inject NavigationManager Nav
+
+<PageTitle>Alert Settings</PageTitle>
+
+<div class="tsa-app">
+
+    <!-- ── Header ─────────────────────────────────────────────────────── -->
+    <div class="tsa-header">
+        <h1>Alert Settings</h1>
+        <p class="tsa-subtitle">Adjust thresholds and radii</p>
+    </div>
+
+    <!-- ── Live rules table ───────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-label">Current Rules</div>
+        <table class="tsa-table">
+            <thead>
+                <tr>
+                    <th>Speed</th>
+                    <th>Radius</th>
+                    <th>Scan</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="tsa-table-muted">
+                    <td>&lt; @S.MinSpeedKmh km/h</td>
+                    <td colspan="2">No alerts</td>
+                </tr>
+                <tr>
+                    <td>@S.MinSpeedKmh – @S.SpeedBreak1Kmh km/h</td>
+                    <td>@S.LowRadiusM m</td>
+                    <td>2×/s</td>
+                </tr>
+                <tr>
+                    <td>@S.SpeedBreak1Kmh – @S.SpeedBreak2Kmh km/h</td>
+                    <td>@S.MidRadiusM m</td>
+                    <td>2×/s</td>
+                </tr>
+                <tr>
+                    <td>@S.SpeedBreak2Kmh – @S.MaxSpeedKmh km/h</td>
+                    <td>@S.HighRadiusM m</td>
+                    <td>3×/s</td>
+                </tr>
+                <tr class="tsa-table-muted">
+                    <td>&gt; @S.MaxSpeedKmh km/h</td>
+                    <td colspan="2">No alerts</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Speed thresholds ───────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-label">Speed Thresholds</div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Min alert speed</span>
+                <span class="tsa-slider-value">@S.MinSpeedKmh km/h</span>
+            </div>
+            <input type="range" min="5" max="40" step="1"
+                   value="@S.MinSpeedKmh"
+                   @oninput="e => SetAndSave(e, v => S.MinSpeedKmh = v)" />
+        </div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Low → mid break</span>
+                <span class="tsa-slider-value">@S.SpeedBreak1Kmh km/h</span>
+            </div>
+            <input type="range" min="20" max="80" step="1"
+                   value="@S.SpeedBreak1Kmh"
+                   @oninput="e => SetAndSave(e, v => S.SpeedBreak1Kmh = v)" />
+        </div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Mid → high break</span>
+                <span class="tsa-slider-value">@S.SpeedBreak2Kmh km/h</span>
+            </div>
+            <input type="range" min="30" max="90" step="1"
+                   value="@S.SpeedBreak2Kmh"
+                   @oninput="e => SetAndSave(e, v => S.SpeedBreak2Kmh = v)" />
+        </div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Max alert speed</span>
+                <span class="tsa-slider-value">@S.MaxSpeedKmh km/h</span>
+            </div>
+            <input type="range" min="80" max="200" step="5"
+                   value="@S.MaxSpeedKmh"
+                   @oninput="e => SetAndSave(e, v => S.MaxSpeedKmh = v)" />
+        </div>
+    </div>
+
+    <!-- ── Alert radii ────────────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-label">Alert Radii</div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Low speed radius</span>
+                <span class="tsa-slider-value">@S.LowRadiusM m</span>
+            </div>
+            <input type="range" min="50" max="500" step="10"
+                   value="@S.LowRadiusM"
+                   @oninput="e => SetAndSave(e, v => S.LowRadiusM = v)" />
+        </div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>Mid speed radius</span>
+                <span class="tsa-slider-value">@S.MidRadiusM m</span>
+            </div>
+            <input type="range" min="50" max="500" step="10"
+                   value="@S.MidRadiusM"
+                   @oninput="e => SetAndSave(e, v => S.MidRadiusM = v)" />
+        </div>
+
+        <div class="tsa-slider-row">
+            <div class="tsa-slider-label">
+                <span>High speed radius</span>
+                <span class="tsa-slider-value">@S.HighRadiusM m</span>
+            </div>
+            <input type="range" min="50" max="600" step="10"
+                   value="@S.HighRadiusM"
+                   @oninput="e => SetAndSave(e, v => S.HighRadiusM = v)" />
+        </div>
+    </div>
+
+    <!-- ── Actions ───────────────────────────────────────────────────── -->
+    <div class="tsa-controls">
+        <button class="tsa-btn tsa-btn--stop" @onclick="ResetAsync">Reset Defaults</button>
+        <a class="tsa-btn tsa-btn--start" href="/">← Back</a>
+    </div>
+
+</div>
+
+@code {
+    private AlertSettings S => SettingsService.Settings;
+
+    protected override async Task OnInitializedAsync()
+        => await SettingsService.LoadAsync();
+
+    private void SetAndSave(ChangeEventArgs e, Action<double> setter)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var v))
+        {
+            setter(v);
+            _ = SettingsService.SaveAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        await SettingsService.ResetAsync();
+        StateHasChanged();
+    }
+}

@@ -19,9 +19,73 @@ html, body {
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
-.tsa-header { text-align: center; }
+.tsa-header { text-align: center; position: relative; }
 .tsa-header h1 { font-size: 1.75rem; font-weight: 700; color: #e0e0ff; }
 .tsa-subtitle  { font-size: 0.85rem; color: #9090b0; margin-top: 4px; }
+
+.tsa-settings-btn {
+    position: absolute;
+    top: 0; right: 0;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: #9090b0;
+    text-decoration: none;
+    padding: 2px 4px;
+    transition: color .15s;
+}
+.tsa-settings-btn:hover { color: #e0e0ff; }
+
+/* ── Settings table ──────────────────────────────────────────────────── */
+.tsa-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+.tsa-table th {
+    color: #9090b0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 4px 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid #1e2a4a;
+}
+.tsa-table td {
+    padding: 7px 8px;
+    color: #e0e0ff;
+    border-bottom: 1px solid #1a2240;
+}
+.tsa-table tr:last-child td { border-bottom: none; }
+.tsa-table-muted td { color: #606080; font-style: italic; }
+
+/* ── Sliders ─────────────────────────────────────────────────────────── */
+.tsa-slider-row {
+    padding: 10px 0;
+    border-bottom: 1px solid #1e2a4a;
+}
+.tsa-slider-row:last-child { border-bottom: none; }
+
+.tsa-slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+    color: #c0c0e0;
+}
+.tsa-slider-value {
+    font-weight: 700;
+    color: #ffd700;
+    font-size: 0.9rem;
+}
+input[type="range"] {
+    width: 100%;
+    accent-color: #64b5f6;
+    cursor: pointer;
+    height: 4px;
+}
 
 /* ── Stopped banner ─────────────────────────────────────────────────── */
 .tsa-stopped-banner {
@@ -137,7 +201,7 @@ html, body {
 }
 .tsa-btn:active   { transform: scale(.97); }
 .tsa-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
-.tsa-btn--start   { background: #388e3c; }
+.tsa-btn--start   { background: #388e3c; text-decoration: none; display: block; text-align: center; }
 .tsa-btn--stop    { background: #c62828; }
 
 /* ── Blazor loading progress ────────────────────────────────────────── */

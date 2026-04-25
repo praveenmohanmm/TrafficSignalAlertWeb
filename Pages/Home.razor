@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @inject GeolocationService GeoService
 @inject TrafficSignalService SignalService
+@inject AlertSettingsService SettingsService
 @inject IJSRuntime JS
 
 <PageTitle>Traffic Signal Alert</PageTitle>
@@ -10,6 +11,7 @@
 
     <!-- ── Header ──────────────────────────────────────────────────────── -->
     <div class="tsa-header">
+        <a class="tsa-settings-btn" href="/settings" title="Settings">⚙</a>
         <h1>Traffic Signal Alert</h1>
         <p class="tsa-subtitle">Alerts you when approaching a traffic signal</p>
     </div>
@@ -129,12 +131,13 @@
     private DateTime     _lastBeepUtc       = DateTime.MinValue;
 
     private double SpeedKmh => _speedMs * 3.6;
-    /// <summary>Null when speed is out of the alertable range (< 17 or > 100 km/h).</summary>
-    private double? AlertRadius => TrafficSignalService.GetAlertRadius(SpeedKmh);
+    /// <summary>Null when speed is outside the configured alertable range.</summary>
+    private double? AlertRadius => SettingsService.Settings.GetAlertRadius(SpeedKmh);
 
     // ── Lifecycle ────────────────────────────────────────────────────────
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await SettingsService.LoadAsync();
         GeoService.LocationChanged += OnLocationChanged;
         GeoService.ErrorOccurred   += OnGeoError;
     }
