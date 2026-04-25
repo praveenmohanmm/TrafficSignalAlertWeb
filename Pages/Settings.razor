@@ -2,6 +2,7 @@
 @inject AlertSettingsService SettingsService
 @inject NavigationManager Nav
 
+
 <PageTitle>Alert Settings</PageTitle>
 
 <div class="tsa-app">
@@ -134,7 +135,7 @@
     <!-- ── Actions ───────────────────────────────────────────────────── -->
     <div class="tsa-controls">
         <button class="tsa-btn tsa-btn--stop" @onclick="ResetAsync">Reset Defaults</button>
-        <a class="tsa-btn tsa-btn--start" href="/">← Back</a>
+        <button class="tsa-btn tsa-btn--start" @onclick='() => Nav.NavigateTo(Nav.BaseUri)'>← Back</button>
     </div>
 
 </div>
