@@ -55,5 +55,6 @@ public class GeolocationService : IAsyncDisposable
     {
         await StopAsync();
         _selfRef?.Dispose();
+        _selfRef = null;   // must be nulled so StartAsync creates a fresh reference next time
     }
 }
