@@ -123,7 +123,6 @@
     // ── Motion & audio state ─────────────────────────────────────────────
     /// <summary>Minimum speed in m/s to be considered moving (~5 km/h).</summary>
     private const double MovingThresholdMs  = 1.4;
-    private const double AudioAlertMetres   = 50.0;
     private const int    BeepCooldownSecs   = 10;
     private bool         _isMoving;
     private double       _speedMs;
@@ -255,12 +254,13 @@
             ];
 
             // ── Audio alert ──────────────────────────────────────────────
-            var audioTarget = nearby.FirstOrDefault(s => s.DistanceMetres <= AudioAlertMetres);
-            if (audioTarget != default
-                && (DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
+            // Fire as soon as any signal enters the configured radius (same
+            // trigger as the visual banner). Beep intensity scales with distance.
+            if ((DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
             {
                 _lastBeepUtc = DateTime.UtcNow;
-                await JS.InvokeVoidAsync("trafficAudio.play", audioTarget.DistanceMetres);
+                await JS.InvokeVoidAsync("trafficAudio.play",
+                    first.DistanceMetres, radius.Value);
             }
         }
         else
