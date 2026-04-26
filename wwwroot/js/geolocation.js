@@ -29,36 +29,11 @@ window.trafficAudio = (function () {
         // Call once during the Start button click to unlock iOS audio
         unlock: function () { try { ctx(); } catch (e) {} },
 
-        // distanceM    — distance to the nearest signal in metres
-        // alertRadiusM  — the currently configured alert radius in metres
-        //
-        // Beep intensity scales relative to the configured radius so the
-        // audio matches the visual alert regardless of what radius is set:
-        //
-        //   > 60 % of radius  →  1 gentle beep  (just entered radius)
-        //   ≤ 60 % of radius  →  2 medium beeps (getting closer)
-        //   ≤ 30 % of radius  →  3 beeps        (close)
-        //   ≤ 30 m (absolute) →  4 rapid beeps  (very close / imminent)
+        // Single high-frequency beep on every alert (10-second cooldown handled in C#)
         play: function (distanceM, alertRadiusM) {
             try {
-                const ac     = ctx();
-                const t      = ac.currentTime;
-                const radius = alertRadiusM || 200;   // safe fallback
-                const pct    = distanceM / radius;
-
-                if (distanceM <= 30) {
-                    // Imminent — 4 rapid high beeps (C6 = 1047 Hz)
-                    for (let i = 0; i < 4; i++) beep(ac, 1047, t + i * 0.18, 0.14);
-                } else if (pct <= 0.30) {
-                    // ≤ 30 % of radius — 3 beeps (A5 = 880 Hz)
-                    for (let i = 0; i < 3; i++) beep(ac, 880,  t + i * 0.25, 0.20);
-                } else if (pct <= 0.60) {
-                    // ≤ 60 % of radius — 2 beeps (E5 = 659 Hz)
-                    for (let i = 0; i < 2; i++) beep(ac, 659,  t + i * 0.32, 0.25);
-                } else {
-                    // > 60 % of radius — 1 gentle beep (C5 = 523 Hz)
-                    beep(ac, 523, t, 0.30);
-                }
+                const ac = ctx();
+                beep(ac, 1047, ac.currentTime, 0.20);   // C6 — one sharp beep
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
     };
