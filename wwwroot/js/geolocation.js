@@ -221,6 +221,58 @@ window.geolocationInterop = (function () {
             _dotNetRef = null;
             _lastPos   = null;
             _prevLat = _prevLon = _prevTime = null;
+        },
+
+        /* ── DEV / TESTING ONLY ──────────────────────────────────────────────
+           Inject a fake GPS position from the browser console without leaving
+           your desk. Call this AFTER clicking "Start Tracking" in the app.
+
+           Usage:
+             // Single position update (speed in m/s — 13.9 m/s ≈ 50 km/h)
+             geolocationInterop.injectPosition(-27.470, 153.026, 13.9);
+
+             // Simulate driving along a route (2-second intervals)
+             geolocationInterop.simulateDrive([
+               { lat: -27.4700, lon: 153.0260, speed: 13.9 },
+               { lat: -27.4710, lon: 153.0270, speed: 13.9 },
+               { lat: -27.4720, lon: 153.0280, speed: 13.9 },
+             ], 2000);
+
+           Speed reference:
+             0       m/s = stationary
+             4.7     m/s = 17 km/h  (lower alert threshold)
+             13.9    m/s = 50 km/h
+             27.8    m/s = 100 km/h (upper alert threshold)
+        ─────────────────────────────────────────────────────────────────── */
+        injectPosition: function (lat, lon, speedMs) {
+            if (!_dotNetRef) {
+                console.warn('[injectPosition] Start Tracking first — _dotNetRef is null.');
+                return;
+            }
+            const pos = { latitude: lat, longitude: lon, accuracy: 5, speed: speedMs ?? 13.9 };
+            _lastPos = pos;
+            _dotNetRef.invokeMethodAsync('OnPositionChanged', pos);
+            console.log(`[injectPosition] lat=${lat}, lon=${lon}, speed=${pos.speed} m/s (${(pos.speed * 3.6).toFixed(1)} km/h)`);
+        },
+
+        simulateDrive: function (waypoints, intervalMs) {
+            if (!Array.isArray(waypoints) || waypoints.length === 0) {
+                console.warn('[simulateDrive] Pass an array of {lat, lon, speed} objects.');
+                return;
+            }
+            intervalMs = intervalMs ?? 2000;
+            let i = 0;
+            console.log(`[simulateDrive] Starting — ${waypoints.length} waypoints, ${intervalMs} ms apart.`);
+            const tick = () => {
+                if (i >= waypoints.length) {
+                    console.log('[simulateDrive] Route complete.');
+                    return;
+                }
+                const wp = waypoints[i++];
+                geolocationInterop.injectPosition(wp.lat, wp.lon, wp.speed ?? 13.9);
+                setTimeout(tick, intervalMs);
+            };
+            tick();
         }
     };
 })();
