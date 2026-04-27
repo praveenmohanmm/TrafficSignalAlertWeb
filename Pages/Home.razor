@@ -271,8 +271,7 @@
             // Mark as alerted BEFORE playing sound so a re-entrant GPS update
             // cannot fire a second beep for the same signal.
             _alertedSignalIds.Add(first.Signal.ObjectId);
-            await JS.InvokeVoidAsync("trafficAudio.play",
-                first.DistanceMetres, radius.Value);
+            await JS.InvokeVoidAsync("trafficAudio.play");
         }
         else
         {

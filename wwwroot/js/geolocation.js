@@ -1,7 +1,14 @@
 /* ── Traffic alert audio ─────────────────────────────────────────────
-   Uses the Web Audio API to synthesise beeps — no audio files needed.
+   Uses the Web Audio API to synthesise an attention-grabbing alert.
    unlock() must be called inside a user-gesture (button click) so that
    iOS Safari allows the AudioContext to run.
+
+   Sound design — 3 up-chirp sweeps (880 → 1760 Hz, sawtooth wave):
+   • Sawtooth is rich in harmonics → cuts through road noise and music
+   • Rising frequency sweep (up-chirp) is physiologically more alerting
+     than a flat tone (used in emergency PA systems for the same reason)
+   • DynamicsCompressor maximises perceived loudness without clipping
+   • Fires once per signal and then never again (handled by C#)
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
     let _ctx = null;
@@ -12,28 +19,49 @@ window.trafficAudio = (function () {
         return _ctx;
     }
 
-    function beep(ac, freq, start, dur) {
-        const osc  = ac.createOscillator();
-        const gain = ac.createGain();
-        osc.connect(gain);
-        gain.connect(ac.destination);
-        osc.type = 'square';                               // harsh, cuts through noise
-        osc.frequency.setValueAtTime(freq, start);
-        gain.gain.setValueAtTime(0.9, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-        osc.start(start);
-        osc.stop(start + dur + 0.01);
-    }
-
     return {
         // Call once during the Start button click to unlock iOS audio
         unlock: function () { try { ctx(); } catch (e) {} },
 
-        // Single high-frequency beep on every alert (10-second cooldown handled in C#)
-        play: function (distanceM, alertRadiusM) {
+        // Three loud up-chirp sweeps — fires exactly once per signal location
+        play: function () {
             try {
                 const ac = ctx();
-                beep(ac, 1047, ac.currentTime, 0.20);   // C6 — one sharp beep
+
+                // Master compressor — squeezes dynamic range up for max loudness
+                const comp = ac.createDynamicsCompressor();
+                comp.threshold.value = -6;
+                comp.knee.value      = 0;
+                comp.ratio.value     = 20;
+                comp.attack.value    = 0.001;
+                comp.release.value   = 0.05;
+                comp.connect(ac.destination);
+
+                // One chirp: sawtooth sweep from 880 Hz to 1760 Hz (one octave up)
+                function chirp(startTime) {
+                    const osc  = ac.createOscillator();
+                    const gain = ac.createGain();
+                    osc.connect(gain);
+                    gain.connect(comp);
+
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(880, startTime);
+                    osc.frequency.exponentialRampToValueAtTime(1760, startTime + 0.15);
+
+                    gain.gain.setValueAtTime(1.0, startTime);
+                    gain.gain.setValueAtTime(1.0, startTime + 0.13);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.22);
+
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.23);
+                }
+
+                // Fire three chirps with a short gap between each
+                const t = ac.currentTime + 0.01;
+                chirp(t);
+                chirp(t + 0.30);
+                chirp(t + 0.60);
+
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
     };
