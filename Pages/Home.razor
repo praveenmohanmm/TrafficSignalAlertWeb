@@ -122,12 +122,17 @@
 
     // ── Motion & audio state ─────────────────────────────────────────────
     /// <summary>Minimum speed in m/s to be considered moving (~5 km/h).</summary>
-    private const double MovingThresholdMs  = 1.4;
-    private const int    BeepCooldownSecs   = 10;
+    private const double MovingThresholdMs = 1.4;
     private bool         _isMoving;
     private double       _speedMs;
-    private string       _speedText         = string.Empty;
-    private DateTime     _lastBeepUtc       = DateTime.MinValue;
+    private string       _speedText        = string.Empty;
+
+    /// <summary>
+    /// Signals that have already fired their alert this session.
+    /// Each ObjectId appears at most once — no repeat audio or visual alert
+    /// for the same physical location until tracking is restarted.
+    /// </summary>
+    private readonly HashSet<int> _alertedSignalIds = [];
 
     private double SpeedKmh => _speedMs * 3.6;
     /// <summary>Null when speed is outside the configured alertable range.</summary>
@@ -179,7 +184,7 @@
         _isAlertActive = false;
         _alertLines    = [];
         _nearbySignals = [];
-        _lastBeepUtc   = DateTime.MinValue;
+        _alertedSignalIds.Clear();   // reset so next session alerts fresh
         _statusMessage = "Tracking stopped.";
         StateHasChanged();
     }
@@ -237,15 +242,25 @@
         }
 
         var nearby = await SignalService.GetNearbySignalsAsync(lat, lon, radius.Value);
-        _nearbySignals = nearby;
 
-        if (nearby.Count > 0)
+        // Keep only signals that have NOT been alerted yet this session.
+        // Once a signal fires its alert it is added to _alertedSignalIds and
+        // permanently suppressed (both audio and visual) until Stop is tapped.
+        var unalerted = nearby
+            .Where(n => !_alertedSignalIds.Contains(n.Signal.ObjectId))
+            .ToList();
+
+        _nearbySignals = unalerted;
+
+        if (unalerted.Count > 0)
         {
-            var first = nearby[0];
+            // Alert for the closest unalerted signal
+            var first = unalerted[0];
+
             _isAlertActive = true;
-            _alertClass    = first.DistanceMetres <= 30  ? "tsa-alert--red"
-                           : first.DistanceMetres <= 60  ? "tsa-alert--orange"
-                                                         : "tsa-alert--green";
+            _alertClass    = first.DistanceMetres <= 30 ? "tsa-alert--red"
+                           : first.DistanceMetres <= 60 ? "tsa-alert--orange"
+                                                        : "tsa-alert--green";
             _alertLines =
             [
                 first.Signal.IntersectionName,
@@ -253,18 +268,15 @@
                 $"{FormatDistance(first.DistanceMetres)} away"
             ];
 
-            // ── Audio alert ──────────────────────────────────────────────
-            // Fire as soon as any signal enters the configured radius (same
-            // trigger as the visual banner). Beep intensity scales with distance.
-            if ((DateTime.UtcNow - _lastBeepUtc).TotalSeconds >= BeepCooldownSecs)
-            {
-                _lastBeepUtc = DateTime.UtcNow;
-                await JS.InvokeVoidAsync("trafficAudio.play",
-                    first.DistanceMetres, radius.Value);
-            }
+            // Mark as alerted BEFORE playing sound so a re-entrant GPS update
+            // cannot fire a second beep for the same signal.
+            _alertedSignalIds.Add(first.Signal.ObjectId);
+            await JS.InvokeVoidAsync("trafficAudio.play",
+                first.DistanceMetres, radius.Value);
         }
         else
         {
+            // All signals within radius have already been alerted — clear banner
             _isAlertActive = false;
             _alertLines    = [];
         }
