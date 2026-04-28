@@ -1,30 +1,28 @@
 /* ── Traffic alert audio ─────────────────────────────────────────────
-   Strategy: fresh AudioContext per play() call
+   Strategy: ONE shared AudioContext, kept alive by a silent oscillator
    ────────────────────────────────────────────────────────────────────
-   Every previous approach shared a single AudioContext that browsers
-   auto-suspend after ~30 s of silence.  The fix: create a brand-new
-   AudioContext each time play() is called, schedule the notes, then
-   close it after they finish.  A fresh context is always in 'running'
-   state — nothing to resume, nothing to suspend between alerts.
-
-   Chrome/Android allows new AudioContext after the user has interacted
-   with the page (Start button tap), even outside a gesture handler.
-   unlock() is kept as a no-op so existing Blazor calls still compile.
+   A single AudioContext is created during the Start button tap (user
+   gesture) so it starts in 'running' state.  A permanent inaudible
+   oscillator (1 Hz, gain 0.001) prevents the browser from ever
+   auto-suspending it.  Every play() call reuses that same context —
+   no resume(), no suspension, no timing issues between alerts.
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
+    let _ctx = null;
 
-    function _sq(ac, t0, t1) {          // square beep C6
-        const osc = ac.createOscillator(), g = ac.createGain();
-        osc.connect(g); g.connect(ac.destination);
+    /* ── helpers that use the shared context ─────────────────────────── */
+    function _sq(t0, t1) {                   // square beep at C6 (1047 Hz)
+        const osc = _ctx.createOscillator(), g = _ctx.createGain();
+        osc.connect(g); g.connect(_ctx.destination);
         osc.type = 'square';
         osc.frequency.value = 1047;
         g.gain.setValueAtTime(0.9, t0);
         g.gain.exponentialRampToValueAtTime(0.001, t1);
         osc.start(t0); osc.stop(t1);
     }
-    function _sn(ac, t0, t1, hz) {     // sine note
-        const osc = ac.createOscillator(), g = ac.createGain();
-        osc.connect(g); g.connect(ac.destination);
+    function _sn(t0, t1, hz) {               // sine note
+        const osc = _ctx.createOscillator(), g = _ctx.createGain();
+        osc.connect(g); g.connect(_ctx.destination);
         osc.type = 'sine';
         osc.frequency.value = hz;
         g.gain.setValueAtTime(0.7, t0);
@@ -32,50 +30,54 @@ window.trafficAudio = (function () {
         osc.start(t0); osc.stop(t1);
     }
 
-    return {
-        // No-op kept for Blazor compatibility (unlock() still called on Start)
-        unlock: function () {},
+    /* ── keep-alive: permanent inaudible oscillator ──────────────────── */
+    function _keepAlive() {
+        const osc = _ctx.createOscillator(), g = _ctx.createGain();
+        g.gain.value = 0.001;       // inaudible but above silence-detection threshold
+        osc.frequency.value = 1;    // 1 Hz — way below human hearing
+        osc.connect(g); g.connect(_ctx.destination);
+        osc.start();                // runs until the page unloads
+    }
 
+    // Re-resume after switching apps and back
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && _ctx && _ctx.state !== 'running')
+            _ctx.resume().catch(function () {});
+    });
+
+    return {
+        /* unlock — called during the Start button click (user gesture).
+           Creates the AudioContext in 'running' state and starts the
+           keep-alive oscillator.  Must remain synchronous. */
+        unlock: function () {
+            if (_ctx) return;
+            try {
+                _ctx = new (window.AudioContext || window.webkitAudioContext)();
+                _keepAlive();
+                console.log('[TSA] unlocked, ctx state: ' + _ctx.state);
+            } catch (e) { console.warn('[TSA] unlock failed:', e); }
+        },
+
+        /* play — schedules the tone on the already-running shared context.
+           Context is guaranteed running (keep-alive prevents suspension). */
         play: function (tone) {
             tone = tone || 'triple-beep';
-            console.log('[TSA] play: ' + tone);
-            try {
-                const ac = new (window.AudioContext || window.webkitAudioContext)();
-                console.log('[TSA] ctx state: ' + ac.state);
+            console.log('[TSA] play: ' + tone + ' | ctx: ' + (_ctx ? _ctx.state : 'null'));
+            if (!_ctx) { console.warn('[TSA] call unlock() first'); return; }
 
-                // Chrome creates AudioContext in 'suspended' state when called outside
-                // a direct user gesture. resume() works as long as the user has
-                // previously interacted with the page (Start button tap qualifies).
-                // We schedule the notes inside the resume Promise so they play
-                // only once the context is actually running.
-                ac.resume().then(function () {
-                    const t = ac.currentTime;
-                    let dur = 0.75;
-
-                    if (tone === 'single-beep') {
-                        _sq(ac, t, t + 0.18);
-                        dur = 0.25;
-                    } else if (tone === 'alert-chime') {
-                        _sn(ac, t,        t + 0.28, 1319);   // E6
-                        _sn(ac, t + 0.30, t + 0.58, 1047);   // C6
-                        _sn(ac, t + 0.61, t + 0.95,  784);   // G5
-                        dur = 1.1;
-                    } else {                                   // triple-beep
-                        _sq(ac, t,        t + 0.18);
-                        _sq(ac, t + 0.25, t + 0.43);
-                        _sq(ac, t + 0.50, t + 0.68);
-                    }
-
-                    // Close context after notes finish to free resources
-                    setTimeout(function () { ac.close().catch(function () {}); }, (dur + 0.2) * 1000);
-                    console.log('[TSA] scheduled after resume, t=' + t.toFixed(3));
-                }).catch(function (e) {
-                    console.warn('[TSA] resume failed:', e);
-                    ac.close().catch(function () {});
-                });
-            } catch (e) {
-                console.warn('[TSA] play failed:', e);
+            const t = _ctx.currentTime;
+            if (tone === 'single-beep') {
+                _sq(t, t + 0.18);
+            } else if (tone === 'alert-chime') {
+                _sn(t,        t + 0.28, 1319);   // E6
+                _sn(t + 0.30, t + 0.58, 1047);   // C6
+                _sn(t + 0.61, t + 0.95,  784);   // G5
+            } else {                               // triple-beep (default)
+                _sq(t,        t + 0.18);
+                _sq(t + 0.25, t + 0.43);
+                _sq(t + 0.50, t + 0.68);
             }
+            console.log('[TSA] scheduled at t=' + t.toFixed(3));
         }
     };
 })();
