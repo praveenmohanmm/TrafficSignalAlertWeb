@@ -13,22 +13,28 @@
 window.trafficAudio = (function () {
     let _ctx = null;
 
-    function ctx() {
+    // Returns a Promise that resolves once the AudioContext is running.
+    // MUST be awaited before scheduling any audio — the browser can
+    // auto-suspend the context after a period of no user interaction.
+    async function readyCtx() {
         if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
-        if (_ctx.state === 'suspended') _ctx.resume();
+        if (_ctx.state !== 'running') await _ctx.resume();
         return _ctx;
     }
 
     return {
         // Call once during the Start button click to unlock iOS audio
-        unlock: function () { try { ctx(); } catch (e) {} },
+        unlock: async function () {
+            try { await readyCtx(); } catch (e) {}
+        },
 
-        // Three loud up-chirp sweeps — fires exactly once per signal location
-        play: function () {
+        // Three loud up-chirp sweeps — fires exactly once per signal location.
+        // Returns a Promise so Blazor's InvokeVoidAsync waits for context resume.
+        play: async function () {
             try {
-                const ac = ctx();
+                const ac = await readyCtx();   // ← await ensures context is running
 
-                // Master compressor — squeezes dynamic range up for max loudness
+                // Master compressor — squeezes dynamic range for max loudness
                 const comp = ac.createDynamicsCompressor();
                 comp.threshold.value = -6;
                 comp.knee.value      = 0;
@@ -37,7 +43,7 @@ window.trafficAudio = (function () {
                 comp.release.value   = 0.05;
                 comp.connect(ac.destination);
 
-                // One chirp: sawtooth sweep from 880 Hz to 1760 Hz (one octave up)
+                // One chirp: sawtooth sweep 880 Hz → 1760 Hz (one octave up)
                 function chirp(startTime) {
                     const osc  = ac.createOscillator();
                     const gain = ac.createGain();
@@ -56,11 +62,13 @@ window.trafficAudio = (function () {
                     osc.stop(startTime + 0.23);
                 }
 
-                // Fire three chirps with a short gap between each
                 const t = ac.currentTime + 0.01;
                 chirp(t);
                 chirp(t + 0.30);
                 chirp(t + 0.60);
+
+                // Clean up the compressor node after all chirps finish
+                setTimeout(() => { try { comp.disconnect(); } catch (_) {} }, 1200);
 
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
