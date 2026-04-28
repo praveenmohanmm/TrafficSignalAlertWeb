@@ -3,47 +3,65 @@
    unlock() must be called inside a user-gesture (button click) so that
    iOS Safari allows the AudioContext to run.
 
-   Keep-alive strategy:
+   Keep-alive strategy — silent looping buffer:
    • The browser auto-suspends AudioContext after ~30 s of silence.
-   • We re-resume on every touchstart / click (passive listeners) so
-     any screen tap the user makes while driving re-unlocks the context.
-   • We also resume on visibilitychange so switching back from another
-     app re-unlocks it automatically.
+   • To prevent this, unlock() starts a completely inaudible (gain ≈ 0)
+     looping AudioBufferSource.  The browser treats the context as
+     "actively playing audio" and never suspends it, so every alert
+     fires reliably — no user tap required between alerts.
+   • On visibilitychange (user switches back from another app) we
+     re-resume and restart the keep-alive if it was interrupted.
    • Fires once per signal and then never again (handled by C#)
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
-    let _ctx = null;
+    let _ctx           = null;
+    let _keepAliveSrc  = null;   // the silent looping source node
 
     // Returns a Promise that resolves once the AudioContext is running.
-    // If the context is suspended (browser auto-suspend after silence)
-    // we attempt resume(); on iOS this only works from a user-gesture,
-    // which is why we also hook touch/click events below.
     async function readyCtx() {
-        if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
-        if (_ctx.state === 'closed') _ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!_ctx || _ctx.state === 'closed')
+            _ctx = new (window.AudioContext || window.webkitAudioContext)();
         if (_ctx.state !== 'running') {
             try { await _ctx.resume(); } catch (e) {}
         }
         return _ctx;
     }
 
-    // Re-unlock on any user touch/click — covers the case where the browser
-    // suspended the context after a period of silence between alerts.
-    function _reUnlock() {
-        if (_ctx && _ctx.state !== 'running') _ctx.resume().catch(() => {});
+    // Starts (or restarts) a silent looping buffer that keeps the
+    // AudioContext from auto-suspending between alerts.
+    function _startKeepAlive(ac) {
+        if (_keepAliveSrc) { try { _keepAliveSrc.stop(); } catch (_) {} }
+        try {
+            // 1-second mono buffer filled with silence
+            const buf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+            const src = ac.createBufferSource();
+            const gain = ac.createGain();
+            gain.gain.value = 0.00001;   // effectively inaudible
+            src.buffer = buf;
+            src.loop   = true;
+            src.connect(gain);
+            gain.connect(ac.destination);
+            src.start();
+            _keepAliveSrc = src;
+        } catch (e) { console.warn('trafficAudio keep-alive failed:', e); }
     }
-    document.addEventListener('touchstart',  _reUnlock, { passive: true });
-    document.addEventListener('click',       _reUnlock, { passive: true });
 
-    // Re-unlock when the user switches back to the tab/app
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') _reUnlock();
+    // If the user switches back from another app, resume + restart keep-alive
+    document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && _ctx) {
+            const ac = await readyCtx();
+            _startKeepAlive(ac);
+        }
     });
 
     return {
-        // Call once during the Start button click to unlock iOS audio
+        // Call once during the Start button click to unlock iOS audio,
+        // then immediately start the silent keep-alive loop.
         unlock: async function () {
-            try { await readyCtx(); } catch (e) {}
+            try {
+                const ac = await readyCtx();
+                _startKeepAlive(ac);
+            } catch (e) {}
         },
 
         // Play the selected alert tone — fires exactly once per signal location.
