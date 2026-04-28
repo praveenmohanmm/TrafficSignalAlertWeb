@@ -28,47 +28,25 @@ window.trafficAudio = (function () {
             try { await readyCtx(); } catch (e) {}
         },
 
-        // Three loud up-chirp sweeps — fires exactly once per signal location.
+        // Single sharp beep — fires exactly once per signal location.
         // Returns a Promise so Blazor's InvokeVoidAsync waits for context resume.
         play: async function () {
             try {
-                const ac = await readyCtx();   // ← await ensures context is running
+                const ac   = await readyCtx();
+                const osc  = ac.createOscillator();
+                const gain = ac.createGain();
 
-                // Master compressor — squeezes dynamic range for max loudness
-                const comp = ac.createDynamicsCompressor();
-                comp.threshold.value = -6;
-                comp.knee.value      = 0;
-                comp.ratio.value     = 20;
-                comp.attack.value    = 0.001;
-                comp.release.value   = 0.05;
-                comp.connect(ac.destination);
+                osc.connect(gain);
+                gain.connect(ac.destination);
 
-                // One chirp: sawtooth sweep 880 Hz → 1760 Hz (one octave up)
-                function chirp(startTime) {
-                    const osc  = ac.createOscillator();
-                    const gain = ac.createGain();
-                    osc.connect(gain);
-                    gain.connect(comp);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(1047, ac.currentTime);   // C6
 
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(880, startTime);
-                    osc.frequency.exponentialRampToValueAtTime(1760, startTime + 0.15);
+                gain.gain.setValueAtTime(0.9, ac.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.20);
 
-                    gain.gain.setValueAtTime(1.0, startTime);
-                    gain.gain.setValueAtTime(1.0, startTime + 0.13);
-                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.22);
-
-                    osc.start(startTime);
-                    osc.stop(startTime + 0.23);
-                }
-
-                const t = ac.currentTime + 0.01;
-                chirp(t);
-                chirp(t + 0.30);
-                chirp(t + 0.60);
-
-                // Clean up the compressor node after all chirps finish
-                setTimeout(() => { try { comp.disconnect(); } catch (_) {} }, 1200);
+                osc.start(ac.currentTime);
+                osc.stop(ac.currentTime + 0.21);
 
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
