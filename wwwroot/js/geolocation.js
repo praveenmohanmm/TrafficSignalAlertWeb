@@ -3,24 +3,42 @@
    unlock() must be called inside a user-gesture (button click) so that
    iOS Safari allows the AudioContext to run.
 
-   Sound design — 3 up-chirp sweeps (880 → 1760 Hz, sawtooth wave):
-   • Sawtooth is rich in harmonics → cuts through road noise and music
-   • Rising frequency sweep (up-chirp) is physiologically more alerting
-     than a flat tone (used in emergency PA systems for the same reason)
-   • DynamicsCompressor maximises perceived loudness without clipping
+   Keep-alive strategy:
+   • The browser auto-suspends AudioContext after ~30 s of silence.
+   • We re-resume on every touchstart / click (passive listeners) so
+     any screen tap the user makes while driving re-unlocks the context.
+   • We also resume on visibilitychange so switching back from another
+     app re-unlocks it automatically.
    • Fires once per signal and then never again (handled by C#)
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
     let _ctx = null;
 
     // Returns a Promise that resolves once the AudioContext is running.
-    // MUST be awaited before scheduling any audio — the browser can
-    // auto-suspend the context after a period of no user interaction.
+    // If the context is suspended (browser auto-suspend after silence)
+    // we attempt resume(); on iOS this only works from a user-gesture,
+    // which is why we also hook touch/click events below.
     async function readyCtx() {
         if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
-        if (_ctx.state !== 'running') await _ctx.resume();
+        if (_ctx.state === 'closed') _ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_ctx.state !== 'running') {
+            try { await _ctx.resume(); } catch (e) {}
+        }
         return _ctx;
     }
+
+    // Re-unlock on any user touch/click — covers the case where the browser
+    // suspended the context after a period of silence between alerts.
+    function _reUnlock() {
+        if (_ctx && _ctx.state !== 'running') _ctx.resume().catch(() => {});
+    }
+    document.addEventListener('touchstart',  _reUnlock, { passive: true });
+    document.addEventListener('click',       _reUnlock, { passive: true });
+
+    // Re-unlock when the user switches back to the tab/app
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') _reUnlock();
+    });
 
     return {
         // Call once during the Start button click to unlock iOS audio
