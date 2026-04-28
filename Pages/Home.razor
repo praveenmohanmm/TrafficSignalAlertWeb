@@ -243,9 +243,13 @@
 
         var nearby = await SignalService.GetNearbySignalsAsync(lat, lon, radius.Value);
 
-        // Keep only signals that have NOT been alerted yet this session.
-        // Once a signal fires its alert it is added to _alertedSignalIds and
-        // permanently suppressed (both audio and visual) until Stop is tapped.
+        // Expire alerted IDs for signals that have left the alert radius.
+        // This lets the same signal alert again on the next approach
+        // while still suppressing repeat alerts during the current approach.
+        var nearbyIds = nearby.Select(n => n.Signal.ObjectId).ToHashSet();
+        _alertedSignalIds.IntersectWith(nearbyIds);
+
+        // Keep only signals that have NOT been alerted on this approach.
         var unalerted = nearby
             .Where(n => !_alertedSignalIds.Contains(n.Signal.ObjectId))
             .ToList();
