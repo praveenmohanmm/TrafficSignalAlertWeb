@@ -28,33 +28,62 @@ window.trafficAudio = (function () {
             try { await readyCtx(); } catch (e) {}
         },
 
-        // Three sharp beeps (C6 square wave) — fires exactly once per signal location.
+        // Play the selected alert tone — fires exactly once per signal location.
+        // tone: "triple-beep" | "single-beep" | "alert-chime"  (default: "triple-beep")
         // Returns a Promise so Blazor's InvokeVoidAsync waits for context resume.
-        play: async function () {
+        play: async function (tone) {
             try {
                 const ac = await readyCtx();
+                tone = tone || 'triple-beep';
 
-                // Fire one short beep at the given startTime
-                function beep(startTime) {
+                // ── Helpers ──────────────────────────────────────────────
+                // Square-wave beep at C6 (1047 Hz)
+                function squareBeep(startTime) {
                     const osc  = ac.createOscillator();
                     const gain = ac.createGain();
                     osc.connect(gain);
                     gain.connect(ac.destination);
-
                     osc.type = 'square';
                     osc.frequency.setValueAtTime(1047, startTime);   // C6
-
                     gain.gain.setValueAtTime(0.9, startTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
-
                     osc.start(startTime);
                     osc.stop(startTime + 0.19);
                 }
 
+                // Sine-wave note at given Hz for given duration
+                function sineNote(startTime, hz, duration) {
+                    const osc  = ac.createOscillator();
+                    const gain = ac.createGain();
+                    osc.connect(gain);
+                    gain.connect(ac.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(hz, startTime);
+                    gain.gain.setValueAtTime(0.7, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+                    osc.start(startTime);
+                    osc.stop(startTime + duration + 0.01);
+                }
+
+                // ── Tones ────────────────────────────────────────────────
                 const t = ac.currentTime;
-                beep(t);           // beep 1
-                beep(t + 0.25);    // beep 2  (75 ms gap)
-                beep(t + 0.50);    // beep 3  (75 ms gap)
+
+                if (tone === 'single-beep') {
+                    // One short C6 square beep
+                    squareBeep(t);
+
+                } else if (tone === 'alert-chime') {
+                    // 3-note descending chime: E6 → C6 → G5 (sine)
+                    sineNote(t,        1319, 0.28);   // E6
+                    sineNote(t + 0.30, 1047, 0.28);   // C6
+                    sineNote(t + 0.60,  784, 0.35);   // G5
+
+                } else {
+                    // triple-beep (default) — 3× C6 square
+                    squareBeep(t);
+                    squareBeep(t + 0.25);
+                    squareBeep(t + 0.50);
+                }
 
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }

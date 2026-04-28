@@ -1,6 +1,7 @@
 @page "/settings"
 @inject AlertSettingsService SettingsService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 
 <PageTitle>Alert Settings</PageTitle>
@@ -50,6 +51,30 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- ── Alert Tone ───────────────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-card-label">Alert Tone</div>
+
+        @foreach (var tone in _tones)
+        {
+            <div class="tsa-tone-row @(S.AlertTone == tone.Id ? "tsa-tone-row--selected" : "")"
+                 @onclick="() => SelectTone(tone.Id)">
+                <div class="tsa-tone-info">
+                    <span class="tsa-tone-name">@tone.Name</span>
+                    <span class="tsa-tone-desc">@tone.Description</span>
+                </div>
+                <div class="tsa-tone-actions">
+                    @if (S.AlertTone == tone.Id)
+                    {
+                        <span class="tsa-tone-badge">✓ Active</span>
+                    }
+                    <button class="tsa-btn-preview" @onclick:stopPropagation="true"
+                            @onclick="() => PreviewToneAsync(tone.Id)">▶ Preview</button>
+                </div>
+            </div>
+        }
     </div>
 
     <!-- ── Speed thresholds ───────────────────────────────────────────── -->
@@ -143,8 +168,30 @@
 @code {
     private AlertSettings S => SettingsService.Settings;
 
+    private record ToneOption(string Id, string Name, string Description);
+
+    private readonly ToneOption[] _tones =
+    [
+        new("triple-beep",  "Triple Beep",  "Three sharp C6 beeps — assertive & attention-grabbing"),
+        new("single-beep",  "Single Beep",  "One short C6 beep — subtle & quick"),
+        new("alert-chime",  "Alert Chime",  "Descending E6 → C6 → G5 chime — pleasant & clear"),
+    ];
+
     protected override async Task OnInitializedAsync()
         => await SettingsService.LoadAsync();
+
+    private void SelectTone(string toneId)
+    {
+        S.AlertTone = toneId;
+        _ = SettingsService.SaveAsync();
+        StateHasChanged();
+    }
+
+    private async Task PreviewToneAsync(string toneId)
+    {
+        await JS.InvokeVoidAsync("trafficAudio.unlock");
+        await JS.InvokeVoidAsync("trafficAudio.play", toneId);
+    }
 
     private void SetAndSave(ChangeEventArgs e, Action<double> setter)
     {

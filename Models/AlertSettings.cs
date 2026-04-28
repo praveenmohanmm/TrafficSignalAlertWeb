@@ -2,6 +2,11 @@ namespace TrafficSignalAlertWeb.Models;
 
 public class AlertSettings
 {
+    /// <summary>
+    /// Alert tone identifier. One of: "triple-beep", "single-beep", "alert-chime".
+    /// </summary>
+    public string AlertTone { get; set; } = "triple-beep";
+
     public double MinSpeedKmh    { get; set; } = 17;
     public double MaxSpeedKmh    { get; set; } = 100;
     public double SpeedBreak1Kmh { get; set; } = 50;   // low  → mid

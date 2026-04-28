@@ -204,6 +204,71 @@ input[type="range"] {
 .tsa-btn--start   { background: #388e3c; text-decoration: none; display: block; text-align: center; }
 .tsa-btn--stop    { background: #c62828; }
 
+/* ── Tone picker ─────────────────────────────────────────────────────── */
+.tsa-tone-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 10px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    background: #131a30;
+    transition: border-color .15s, background .15s;
+    gap: 10px;
+}
+.tsa-tone-row:last-child { margin-bottom: 0; }
+.tsa-tone-row:hover { background: #1a2444; }
+.tsa-tone-row--selected {
+    border-color: #4a7fff;
+    background: #1a2a50;
+}
+.tsa-tone-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.tsa-tone-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #e0e8ff;
+}
+.tsa-tone-desc {
+    font-size: 0.75rem;
+    color: #8090b8;
+}
+.tsa-tone-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.tsa-tone-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4a7fff;
+    white-space: nowrap;
+}
+.tsa-btn-preview {
+    padding: 6px 12px;
+    border: 1px solid #4a7fff;
+    border-radius: 6px;
+    background: transparent;
+    color: #4a7fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, color .15s;
+}
+.tsa-btn-preview:hover {
+    background: #4a7fff;
+    color: #fff;
+}
+.tsa-btn-preview:active { opacity: .75; }
+
 /* ── Blazor loading progress ────────────────────────────────────────── */
 .loading-progress {
     position: relative;
