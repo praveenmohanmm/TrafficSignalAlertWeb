@@ -1,115 +1,69 @@
 /* ── Traffic alert audio ─────────────────────────────────────────────
-   Strategy: synchronous PCM synthesis → WAV data URI → HTMLAudioElement
+   Strategy: fresh AudioContext per play() call
    ────────────────────────────────────────────────────────────────────
-   All previous approaches (AudioContext, OfflineAudioContext + blob)
-   failed because:
-   • Live AudioContext auto-suspends after ~30 s of silence on Chrome/iOS
-   • Async rendering inside unlock() broke the synchronous user-gesture
-     chain required by iOS Safari to allow Audio.play()
+   Every previous approach shared a single AudioContext that browsers
+   auto-suspend after ~30 s of silence.  The fix: create a brand-new
+   AudioContext each time play() is called, schedule the notes, then
+   close it after they finish.  A fresh context is always in 'running'
+   state — nothing to resume, nothing to suspend between alerts.
 
-   This implementation:
-   1. Synthesises every tone with pure JS maths (no AudioContext at all)
-   2. Encodes to a WAV data URI — fully synchronous, no Promises
-   3. Creates HTMLAudioElement objects and calls play()+pause() while
-      still in the synchronous Start-button click handler
-   4. play() simply resets currentTime and fires — nothing can suspend
+   Chrome/Android allows new AudioContext after the user has interacted
+   with the page (Start button tap), even outside a gesture handler.
+   unlock() is kept as a no-op so existing Blazor calls still compile.
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
-    const _audio = {};   // tone id → HTMLAudioElement
-    const SR     = 44100;
 
-    /* ── PCM helpers ─────────────────────────────────────────────────── */
-    function _sq(buf, freq, t0, t1, vol) {   // square wave with exponential decay
-        const i0 = Math.floor(t0 * SR), i1 = Math.min(Math.ceil(t1 * SR), buf.length);
-        const span = t1 - t0;
-        for (let i = i0; i < i1; i++) {
-            const t   = (i - i0) / SR;
-            const wav = ((freq * t % 1) < 0.5) ? 1 : -1;
-            buf[i]   += wav * vol * Math.exp(-9 * t / span);
-        }
+    function _sq(ac, t0, t1) {          // square beep C6
+        const osc = ac.createOscillator(), g = ac.createGain();
+        osc.connect(g); g.connect(ac.destination);
+        osc.type = 'square';
+        osc.frequency.value = 1047;
+        g.gain.setValueAtTime(0.9, t0);
+        g.gain.exponentialRampToValueAtTime(0.001, t1);
+        osc.start(t0); osc.stop(t1);
     }
-    function _sn(buf, freq, t0, t1, vol) {   // sine wave with exponential decay
-        const i0 = Math.floor(t0 * SR), i1 = Math.min(Math.ceil(t1 * SR), buf.length);
-        const span = t1 - t0;
-        for (let i = i0; i < i1; i++) {
-            const t   = (i - i0) / SR;
-            buf[i]   += Math.sin(2 * Math.PI * freq * t) * vol * Math.exp(-7 * t / span);
-        }
-    }
-
-    /* ── WAV encoder ─────────────────────────────────────────────────── */
-    function _toDataUri(buf) {
-        const len = buf.length;
-        const ab  = new ArrayBuffer(44 + len * 2);
-        const v   = new DataView(ab);
-        let   p   = 0;
-        const s4  = w => { for (let i = 0; i < w.length; i++) v.setUint8(p++, w.charCodeAt(i)); };
-        const u16 = n => { v.setUint16(p, n, true); p += 2; };
-        const u32 = n => { v.setUint32(p, n, true); p += 4; };
-
-        s4('RIFF'); u32(36 + len * 2); s4('WAVE');
-        s4('fmt '); u32(16); u16(1); u16(1);        // PCM, mono
-        u32(SR); u32(SR * 2); u16(2); u16(16);      // sampleRate → bitsPerSample
-        s4('data'); u32(len * 2);
-
-        for (let i = 0; i < len; i++) {
-            const x = Math.max(-1, Math.min(1, buf[i]));
-            v.setInt16(p, x < 0 ? x * 32768 : x * 32767, true); p += 2;
-        }
-        // Build binary string in 8 KB chunks (avoids call-stack limit on large arrays)
-        const bytes = new Uint8Array(ab);
-        let bin = '';
-        for (let i = 0; i < bytes.length; i += 8192)
-            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-        return 'data:audio/wav;base64,' + btoa(bin);
-    }
-
-    /* ── Tone definitions ────────────────────────────────────────────── */
-    function _build(id) {
-        let buf;
-        if (id === 'single-beep') {
-            buf = new Float32Array(Math.ceil(SR * 0.30));
-            _sq(buf, 1047, 0.01, 0.20, 0.9);                          // C6
-        } else if (id === 'alert-chime') {
-            buf = new Float32Array(Math.ceil(SR * 1.05));
-            _sn(buf, 1319, 0.01, 0.29, 0.7);                          // E6
-            _sn(buf, 1047, 0.31, 0.59, 0.7);                          // C6
-            _sn(buf,  784, 0.61, 0.96, 0.7);                          // G5
-        } else {                                                        // triple-beep
-            buf = new Float32Array(Math.ceil(SR * 0.75));
-            _sq(buf, 1047, 0.01, 0.20, 0.9);
-            _sq(buf, 1047, 0.26, 0.45, 0.9);
-            _sq(buf, 1047, 0.51, 0.70, 0.9);
-        }
-        return _toDataUri(buf);
+    function _sn(ac, t0, t1, hz) {     // sine note
+        const osc = ac.createOscillator(), g = ac.createGain();
+        osc.connect(g); g.connect(ac.destination);
+        osc.type = 'sine';
+        osc.frequency.value = hz;
+        g.gain.setValueAtTime(0.7, t0);
+        g.gain.exponentialRampToValueAtTime(0.001, t1);
+        osc.start(t0); osc.stop(t1);
     }
 
     return {
-        /* unlock ── MUST be called synchronously inside the Start button
-           click handler (user gesture).  Builds all tones via pure JS
-           maths — no Promises, no awaits — then calls play()+pause() on
-           each Audio element while still in the gesture call stack.
-           iOS Safari requires play() to be in the synchronous path. */
-        unlock: function () {
-            for (const id of ['triple-beep', 'single-beep', 'alert-chime']) {
-                if (_audio[id]) continue;
-                const a = new Audio(_build(id));
-                a.preload = 'auto';
-                // Synchronous play call → unlocks the element on iOS
-                a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
-                _audio[id] = a;
-            }
-        },
+        // No-op kept for Blazor compatibility (unlock() still called on Start)
+        unlock: function () {},
 
-        /* play ── resets the pre-built Audio element and plays it.
-           Fire-and-forget: no await, so Blazor interop returns instantly.
-           Nothing to suspend, nothing to re-lock between alerts. */
         play: function (tone) {
-            tone       = tone || 'triple-beep';
-            const a    = _audio[tone] || _audio['triple-beep'];
-            if (!a) { console.warn('trafficAudio.play: call unlock() first'); return; }
-            a.currentTime = 0;
-            a.play().catch(e => console.warn('trafficAudio.play failed:', e));
+            tone = tone || 'triple-beep';
+            console.log('[TSA] play: ' + tone);
+            try {
+                const ac  = new (window.AudioContext || window.webkitAudioContext)();
+                const t   = ac.currentTime;
+                let   dur = 0.75;
+
+                if (tone === 'single-beep') {
+                    _sq(ac, t, t + 0.18);
+                    dur = 0.25;
+                } else if (tone === 'alert-chime') {
+                    _sn(ac, t,        t + 0.28, 1319);   // E6
+                    _sn(ac, t + 0.30, t + 0.58, 1047);   // C6
+                    _sn(ac, t + 0.61, t + 0.95,  784);   // G5
+                    dur = 1.1;
+                } else {                                   // triple-beep
+                    _sq(ac, t,        t + 0.18);
+                    _sq(ac, t + 0.25, t + 0.43);
+                    _sq(ac, t + 0.50, t + 0.68);
+                }
+
+                // Close context after notes finish to free resources
+                setTimeout(() => ac.close().catch(() => {}), (dur + 0.2) * 1000);
+                console.log('[TSA] scheduled OK, dur=' + dur);
+            } catch (e) {
+                console.warn('[TSA] play failed:', e);
+            }
         }
     };
 })();

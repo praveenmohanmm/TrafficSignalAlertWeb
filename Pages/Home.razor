@@ -88,10 +88,10 @@
         </div>
     }
 
-    <!-- ── Loaded count ──────────────────────────────────────────────────── -->
+    <!-- ── Loaded count + alert counter ───────────────────────────────── -->
     @if (_signalsLoaded > 0)
     {
-        <div class="tsa-status">@_signalsLoaded signals loaded</div>
+        <div class="tsa-status">@_signalsLoaded signals loaded · Alerts fired: @_alertsFired</div>
     }
 
     <!-- ── Controls ─────────────────────────────────────────────────────── -->
@@ -133,6 +133,7 @@
     /// for the same physical location until tracking is restarted.
     /// </summary>
     private readonly HashSet<int> _alertedSignalIds = [];
+    private int _alertsFired;
 
     private double SpeedKmh => _speedMs * 3.6;
     /// <summary>Null when speed is outside the configured alertable range.</summary>
@@ -184,7 +185,8 @@
         _isAlertActive = false;
         _alertLines    = [];
         _nearbySignals = [];
-        _alertedSignalIds.Clear();   // reset so next session alerts fresh
+        _alertedSignalIds.Clear();
+        _alertsFired = 0;
         _statusMessage = "Tracking stopped.";
         StateHasChanged();
     }
@@ -275,6 +277,7 @@
             // Mark as alerted BEFORE playing sound so a re-entrant GPS update
             // cannot fire a second beep for the same signal.
             _alertedSignalIds.Add(first.Signal.ObjectId);
+            _alertsFired++;
             await JS.InvokeVoidAsync("trafficAudio.play", SettingsService.Settings.AlertTone);
         }
         else
