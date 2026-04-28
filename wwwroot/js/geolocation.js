@@ -40,27 +40,39 @@ window.trafficAudio = (function () {
             tone = tone || 'triple-beep';
             console.log('[TSA] play: ' + tone);
             try {
-                const ac  = new (window.AudioContext || window.webkitAudioContext)();
-                const t   = ac.currentTime;
-                let   dur = 0.75;
+                const ac = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('[TSA] ctx state: ' + ac.state);
 
-                if (tone === 'single-beep') {
-                    _sq(ac, t, t + 0.18);
-                    dur = 0.25;
-                } else if (tone === 'alert-chime') {
-                    _sn(ac, t,        t + 0.28, 1319);   // E6
-                    _sn(ac, t + 0.30, t + 0.58, 1047);   // C6
-                    _sn(ac, t + 0.61, t + 0.95,  784);   // G5
-                    dur = 1.1;
-                } else {                                   // triple-beep
-                    _sq(ac, t,        t + 0.18);
-                    _sq(ac, t + 0.25, t + 0.43);
-                    _sq(ac, t + 0.50, t + 0.68);
-                }
+                // Chrome creates AudioContext in 'suspended' state when called outside
+                // a direct user gesture. resume() works as long as the user has
+                // previously interacted with the page (Start button tap qualifies).
+                // We schedule the notes inside the resume Promise so they play
+                // only once the context is actually running.
+                ac.resume().then(function () {
+                    const t = ac.currentTime;
+                    let dur = 0.75;
 
-                // Close context after notes finish to free resources
-                setTimeout(() => ac.close().catch(() => {}), (dur + 0.2) * 1000);
-                console.log('[TSA] scheduled OK, dur=' + dur);
+                    if (tone === 'single-beep') {
+                        _sq(ac, t, t + 0.18);
+                        dur = 0.25;
+                    } else if (tone === 'alert-chime') {
+                        _sn(ac, t,        t + 0.28, 1319);   // E6
+                        _sn(ac, t + 0.30, t + 0.58, 1047);   // C6
+                        _sn(ac, t + 0.61, t + 0.95,  784);   // G5
+                        dur = 1.1;
+                    } else {                                   // triple-beep
+                        _sq(ac, t,        t + 0.18);
+                        _sq(ac, t + 0.25, t + 0.43);
+                        _sq(ac, t + 0.50, t + 0.68);
+                    }
+
+                    // Close context after notes finish to free resources
+                    setTimeout(function () { ac.close().catch(function () {}); }, (dur + 0.2) * 1000);
+                    console.log('[TSA] scheduled after resume, t=' + t.toFixed(3));
+                }).catch(function (e) {
+                    console.warn('[TSA] resume failed:', e);
+                    ac.close().catch(function () {});
+                });
             } catch (e) {
                 console.warn('[TSA] play failed:', e);
             }
