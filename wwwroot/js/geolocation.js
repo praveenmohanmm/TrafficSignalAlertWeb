@@ -1,127 +1,113 @@
 /* ── Traffic alert audio ─────────────────────────────────────────────
-   Uses the Web Audio API to synthesise an attention-grabbing alert.
-   unlock() must be called inside a user-gesture (button click) so that
-   iOS Safari allows the AudioContext to run.
+   Strategy: OfflineAudioContext → WAV blob → HTMLAudioElement
+   ────────────────────────────────────────────────────────────────────
+   AudioContext (live) auto-suspends after ~30 s of silence and cannot
+   be resumed programmatically on iOS — making it unreliable for driving.
 
-   Keep-alive strategy — silent looping buffer:
-   • The browser auto-suspends AudioContext after ~30 s of silence.
-   • To prevent this, unlock() starts a completely inaudible (gain ≈ 0)
-     looping AudioBufferSource.  The browser treats the context as
-     "actively playing audio" and never suspends it, so every alert
-     fires reliably — no user tap required between alerts.
-   • On visibilitychange (user switches back from another app) we
-     re-resume and restart the keep-alive if it was interrupted.
-   • Fires once per signal and then never again (handled by C#)
+   Instead we:
+   1. Render each tone OFFLINE (OfflineAudioContext never suspends) into
+      a WAV blob during the Start button tap (user gesture).
+   2. Pre-load each blob into an HTMLAudioElement and call play()+pause()
+      once during the gesture to unlock it on iOS.
+   3. For every subsequent alert, just reset currentTime and call play().
+      HTMLAudioElement.play() works at any time after the initial unlock,
+      with no AudioContext to suspend — fully reliable between alerts.
 ─────────────────────────────────────────────────────────────────────── */
 window.trafficAudio = (function () {
-    let _ctx           = null;
-    let _keepAliveSrc  = null;   // the silent looping source node
+    // Pre-rendered Audio elements, keyed by tone id
+    const _audio = {};
+    let   _unlocked = false;
 
-    // Returns a Promise that resolves once the AudioContext is running.
-    async function readyCtx() {
-        if (!_ctx || _ctx.state === 'closed')
-            _ctx = new (window.AudioContext || window.webkitAudioContext)();
-        if (_ctx.state !== 'running') {
-            try { await _ctx.resume(); } catch (e) {}
+    /* Convert a mono AudioBuffer to a 16-bit PCM WAV ArrayBuffer */
+    function _toWav(buf) {
+        const sr  = buf.sampleRate;
+        const len = buf.length;
+        const ab  = new ArrayBuffer(44 + len * 2);
+        const v   = new DataView(ab);
+        let   p   = 0;
+
+        function str(s) { for (let i = 0; i < s.length; i++) v.setUint8(p++, s.charCodeAt(i)); }
+        function u16(n) { v.setUint16(p, n, true); p += 2; }
+        function u32(n) { v.setUint32(p, n, true); p += 4; }
+
+        str('RIFF'); u32(36 + len * 2); str('WAVE');
+        str('fmt '); u32(16); u16(1); u16(1);   // PCM, mono
+        u32(sr); u32(sr * 2); u16(2); u16(16);  // sampleRate, byteRate, blockAlign, bitsPerSample
+        str('data'); u32(len * 2);
+
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+            const s = Math.max(-1, Math.min(1, ch[i]));
+            v.setInt16(p, s < 0 ? s * 32768 : s * 32767, true);
+            p += 2;
         }
-        return _ctx;
+        return ab;
     }
 
-    // Starts (or restarts) a silent looping buffer that keeps the
-    // AudioContext from auto-suspending between alerts.
-    function _startKeepAlive(ac) {
-        if (_keepAliveSrc) { try { _keepAliveSrc.stop(); } catch (_) {} }
-        try {
-            // 1-second mono buffer filled with silence
-            const buf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-            const src = ac.createBufferSource();
-            const gain = ac.createGain();
-            gain.gain.value = 0.00001;   // effectively inaudible
-            src.buffer = buf;
-            src.loop   = true;
-            src.connect(gain);
-            gain.connect(ac.destination);
-            src.start();
-            _keepAliveSrc = src;
-        } catch (e) { console.warn('trafficAudio keep-alive failed:', e); }
-    }
+    /* Synthesise a tone entirely offline (no user gesture required) */
+    async function _renderTone(toneId) {
+        const sr  = 44100;
+        const dur = toneId === 'alert-chime' ? 1.1 : 0.85;
+        const ctx = new OfflineAudioContext(1, Math.ceil(sr * dur), sr);
 
-    // If the user switches back from another app, resume + restart keep-alive
-    document.addEventListener('visibilitychange', async () => {
-        if (document.visibilityState === 'visible' && _ctx) {
-            const ac = await readyCtx();
-            _startKeepAlive(ac);
+        function beep(t) {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.connect(g); g.connect(ctx.destination);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1047, t);       // C6
+            g.gain.setValueAtTime(0.9, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+            osc.start(t); osc.stop(t + 0.19);
         }
-    });
+        function note(t, hz, d) {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.connect(g); g.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(hz, t);
+            g.gain.setValueAtTime(0.7, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + d);
+            osc.start(t); osc.stop(t + d + 0.01);
+        }
+
+        if      (toneId === 'single-beep')  { beep(0.01); }
+        else if (toneId === 'alert-chime')  { note(0.01, 1319, 0.28); note(0.31, 1047, 0.28); note(0.61, 784, 0.35); }
+        else /* triple-beep */              { beep(0.01); beep(0.26); beep(0.51); }
+
+        const rendered = await ctx.startRendering();
+        const blob = new Blob([_toWav(rendered)], { type: 'audio/wav' });
+        return URL.createObjectURL(blob);
+    }
 
     return {
-        // Call once during the Start button click to unlock iOS audio,
-        // then immediately start the silent keep-alive loop.
+        /* ── unlock ───────────────────────────────────────────────────
+           MUST be called inside the Start button click (user gesture).
+           Renders all three tones offline then pre-unlocks each Audio
+           element with a silent play+pause so iOS allows future plays. */
         unlock: async function () {
+            if (_unlocked) return;
             try {
-                const ac = await readyCtx();
-                _startKeepAlive(ac);
-            } catch (e) {}
+                for (const id of ['triple-beep', 'single-beep', 'alert-chime']) {
+                    const url = await _renderTone(id);
+                    const a   = new Audio(url);
+                    a.preload = 'auto';
+                    // play+pause inside user gesture → unlocks the element on iOS
+                    try { await a.play(); a.pause(); a.currentTime = 0; } catch (_) {}
+                    _audio[id] = a;
+                }
+                _unlocked = true;
+            } catch (e) { console.warn('trafficAudio.unlock failed:', e); }
         },
 
-        // Play the selected alert tone — fires exactly once per signal location.
-        // tone: "triple-beep" | "single-beep" | "alert-chime"  (default: "triple-beep")
-        // Returns a Promise so Blazor's InvokeVoidAsync waits for context resume.
+        /* ── play ─────────────────────────────────────────────────────
+           Resets the pre-rendered Audio element to the start and plays.
+           Works at any time after unlock() — no AudioContext involved,
+           no suspension risk, no user gesture required. */
         play: async function (tone) {
-            try {
-                const ac = await readyCtx();
-                tone = tone || 'triple-beep';
-
-                // ── Helpers ──────────────────────────────────────────────
-                // Square-wave beep at C6 (1047 Hz)
-                function squareBeep(startTime) {
-                    const osc  = ac.createOscillator();
-                    const gain = ac.createGain();
-                    osc.connect(gain);
-                    gain.connect(ac.destination);
-                    osc.type = 'square';
-                    osc.frequency.setValueAtTime(1047, startTime);   // C6
-                    gain.gain.setValueAtTime(0.9, startTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
-                    osc.start(startTime);
-                    osc.stop(startTime + 0.19);
-                }
-
-                // Sine-wave note at given Hz for given duration
-                function sineNote(startTime, hz, duration) {
-                    const osc  = ac.createOscillator();
-                    const gain = ac.createGain();
-                    osc.connect(gain);
-                    gain.connect(ac.destination);
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(hz, startTime);
-                    gain.gain.setValueAtTime(0.7, startTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-                    osc.start(startTime);
-                    osc.stop(startTime + duration + 0.01);
-                }
-
-                // ── Tones ────────────────────────────────────────────────
-                const t = ac.currentTime;
-
-                if (tone === 'single-beep') {
-                    // One short C6 square beep
-                    squareBeep(t);
-
-                } else if (tone === 'alert-chime') {
-                    // 3-note descending chime: E6 → C6 → G5 (sine)
-                    sineNote(t,        1319, 0.28);   // E6
-                    sineNote(t + 0.30, 1047, 0.28);   // C6
-                    sineNote(t + 0.60,  784, 0.35);   // G5
-
-                } else {
-                    // triple-beep (default) — 3× C6 square
-                    squareBeep(t);
-                    squareBeep(t + 0.25);
-                    squareBeep(t + 0.50);
-                }
-
-            } catch (e) { console.warn('trafficAudio.play failed:', e); }
+            tone = tone || 'triple-beep';
+            const a = _audio[tone] || _audio['triple-beep'];
+            if (!a) { console.warn('trafficAudio.play: call unlock() first'); return; }
+            try { a.currentTime = 0; await a.play(); }
+            catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
     };
 })();
