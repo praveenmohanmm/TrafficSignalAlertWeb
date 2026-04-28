@@ -28,25 +28,33 @@ window.trafficAudio = (function () {
             try { await readyCtx(); } catch (e) {}
         },
 
-        // Single sharp beep — fires exactly once per signal location.
+        // Three sharp beeps (C6 square wave) — fires exactly once per signal location.
         // Returns a Promise so Blazor's InvokeVoidAsync waits for context resume.
         play: async function () {
             try {
-                const ac   = await readyCtx();
-                const osc  = ac.createOscillator();
-                const gain = ac.createGain();
+                const ac = await readyCtx();
 
-                osc.connect(gain);
-                gain.connect(ac.destination);
+                // Fire one short beep at the given startTime
+                function beep(startTime) {
+                    const osc  = ac.createOscillator();
+                    const gain = ac.createGain();
+                    osc.connect(gain);
+                    gain.connect(ac.destination);
 
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(1047, ac.currentTime);   // C6
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(1047, startTime);   // C6
 
-                gain.gain.setValueAtTime(0.9, ac.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.20);
+                    gain.gain.setValueAtTime(0.9, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
 
-                osc.start(ac.currentTime);
-                osc.stop(ac.currentTime + 0.21);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.19);
+                }
+
+                const t = ac.currentTime;
+                beep(t);           // beep 1
+                beep(t + 0.25);    // beep 2  (75 ms gap)
+                beep(t + 0.50);    // beep 3  (75 ms gap)
 
             } catch (e) { console.warn('trafficAudio.play failed:', e); }
         }
