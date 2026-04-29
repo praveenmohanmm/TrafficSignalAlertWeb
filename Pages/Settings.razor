@@ -9,8 +9,13 @@
 
     <!-- ── Header ─────────────────────────────────────────────────────── -->
     <div class="tsa-header">
-        <h1>Alert Settings</h1>
-        <p class="tsa-subtitle">Adjust thresholds and radii</p>
+        <div class="tsa-header-brand">
+            <span class="tsa-header-icon">⚙</span>
+            <div class="tsa-header-text">
+                <h1>Alert Settings</h1>
+                <p>Adjust thresholds and radii</p>
+            </div>
+        </div>
     </div>
 
     <!-- ── Live rules table ───────────────────────────────────────────── -->
@@ -202,8 +207,8 @@
 
     <!-- ── Actions ───────────────────────────────────────────────────── -->
     <div class="tsa-controls">
-        <button class="tsa-btn tsa-btn--stop" @onclick="ResetAsync">Reset Defaults</button>
-        <button class="tsa-btn tsa-btn--start" @onclick='() => Nav.NavigateTo(Nav.BaseUri)'>← Back</button>
+        <button class="tsa-btn tsa-btn--secondary" @onclick="ResetAsync">↺ Reset Defaults</button>
+        <button class="tsa-btn tsa-btn--secondary" @onclick='() => Nav.NavigateTo(Nav.BaseUri)'>← Back</button>
     </div>
 
 </div>

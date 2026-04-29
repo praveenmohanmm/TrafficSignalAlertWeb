@@ -11,35 +11,46 @@
 
     <!-- ── Header ──────────────────────────────────────────────────────── -->
     <div class="tsa-header">
-        <a class="tsa-settings-btn" href="settings" title="Settings">⚙</a>
-        <h1>Traffic Signal Alert</h1>
-        <p class="tsa-subtitle">Alerts you when approaching a traffic signal</p>
+        <div class="tsa-header-brand">
+            <span class="tsa-header-icon">🚦</span>
+            <div class="tsa-header-text">
+                <h1>Traffic Signal Alert</h1>
+                <p>Alerts when approaching a signal</p>
+            </div>
+        </div>
+        <div class="tsa-header-actions">
+            <a class="tsa-settings-btn" href="settings" title="Settings">⚙</a>
+            <span class="tsa-status-dot @(GeoService.IsTracking ? "active" : "")"></span>
+        </div>
     </div>
 
     <!-- ── Out-of-range banner (alerts silenced) ──────────────────────── -->
     @if (GeoService.IsTracking && AlertRadius is null && !string.IsNullOrEmpty(_speedText))
     {
-        <div class="tsa-stopped-banner">
-            @if (SpeedKmh < 17)
+        <div class="tsa-paused-banner">
+            @if (SpeedKmh < SettingsService.Settings.MinSpeedKmh)
             {
-                <span>🛑 Too slow — alerts paused (&lt; 17 km/h)</span>
+                <span>🛑 Too slow — alerts paused (&lt; @SettingsService.Settings.MinSpeedKmh km/h)</span>
             }
             else
             {
-                <span>⚠ Speed too high — alerts paused (&gt; 100 km/h)</span>
+                <span>⚡ Too fast — alerts paused (&gt; @SettingsService.Settings.MaxSpeedKmh km/h)</span>
             }
         </div>
     }
 
     <!-- ── Alert banner ────────────────────────────────────────────────── -->
-    @if (_isAlertActive)
+    @if (_isAlertActive && _nearbySignals.Count > 0)
     {
+        var first = _nearbySignals[0];
         <div class="tsa-alert @_alertClass">
-            <div class="tsa-alert-title">⚠ SIGNAL NEARBY</div>
-            @foreach (var line in _alertLines)
-            {
-                <div class="tsa-alert-line">@line</div>
-            }
+            <div class="tsa-alert-header">
+                <span class="tsa-alert-icon">⚠</span>
+                <span class="tsa-alert-label">Signal Nearby</span>
+                <span class="tsa-alert-dist">@FormatDistance(first.DistanceMetres)</span>
+            </div>
+            <div class="tsa-alert-name">@first.Signal.IntersectionName</div>
+            <span class="tsa-alert-type">@first.Signal.IntersectionType</span>
         </div>
     }
 
@@ -51,25 +62,40 @@
 
     <!-- ── Closest signal card ──────────────────────────────────────────── -->
     <div class="tsa-card">
-        <div class="tsa-card-row">
-            <div class="tsa-card-label">Nearest Signal</div>
-            <div class="tsa-card-distance">@_closestDistanceText</div>
-        </div>
-        <div class="tsa-card-value">@_closestSignalText</div>
-        @if (!string.IsNullOrEmpty(_speedText))
-        {
-            <div class="tsa-card-sub tsa-speed @(_isMoving ? "tsa-speed--moving" : "tsa-speed--stopped")">
-                @(_isMoving ? "Moving" : "Stopped") · @_speedText
+        <div class="tsa-card-label">Nearest Signal</div>
+        @{ var (dVal, dUnit) = SplitDistance(_closestDistanceText); }
+        <div class="tsa-signal-grid">
+            <div class="tsa-signal-info">
+                <div class="tsa-signal-name">@_closestSignalText</div>
+                @if (!string.IsNullOrEmpty(_speedText))
+                {
+                    <div class="tsa-speed-pill">
+                        <span class="tsa-speed-dot @(_isMoving ? "moving" : "stopped")"></span>
+                        <span class="tsa-speed-pill-val">@_speedText</span>
+                        <span class="tsa-speed-pill-label">@(_isMoving ? "moving" : "stopped")</span>
+                    </div>
+                }
             </div>
-        }
+            <div class="tsa-dist-block">
+                <div class="tsa-dist-value">@dVal</div>
+                <div class="tsa-dist-unit">@dUnit</div>
+            </div>
+        </div>
     </div>
 
-    <!-- ── Alert radius legend ──────────────────────────────────────────── -->
-    <div class="tsa-card tsa-legend">
-        <span>Alert radius: <strong>@(AlertRadius is null ? "—" : $"{AlertRadius} m")</strong></span>
-        <span class="tsa-dot green"></span><span>≤@(AlertRadius?.ToString() ?? "—") m</span>
-        <span class="tsa-dot orange"></span><span>≤60 m</span>
-        <span class="tsa-dot red"></span><span>≤30 m</span>
+    <!-- ── Alert radius bar ──────────────────────────────────────────────── -->
+    <div class="tsa-card">
+        <div class="tsa-radius-bar">
+            <div class="tsa-radius-bar-label">
+                Alert radius
+                <span class="tsa-radius-bar-val">@(AlertRadius is null ? "—" : $"{AlertRadius} m")</span>
+            </div>
+            <div class="tsa-radius-legend">
+                <div class="tsa-radius-item"><span class="tsa-dot green"></span>≤@(AlertRadius?.ToString() ?? "—") m</div>
+                <div class="tsa-radius-item"><span class="tsa-dot orange"></span>≤60 m</div>
+                <div class="tsa-radius-item"><span class="tsa-dot red"></span>≤30 m</div>
+            </div>
+        </div>
     </div>
 
     <!-- ── Nearby signals list ──────────────────────────────────────────── -->
@@ -97,10 +123,10 @@
     <!-- ── Controls ─────────────────────────────────────────────────────── -->
     <div class="tsa-controls">
         <button class="tsa-btn tsa-btn--start" @onclick="StartAsync" disabled="@GeoService.IsTracking">
-            Start Tracking
+            ▶ Start Tracking
         </button>
         <button class="tsa-btn tsa-btn--stop" @onclick="StopAsync" disabled="@(!GeoService.IsTracking)">
-            Stop Tracking
+            ■ Stop Tracking
         </button>
     </div>
 
@@ -290,6 +316,14 @@
 
     private static string FormatDistance(double m) =>
         m >= 1000 ? $"{m / 1000:F2} km" : $"{m:F0} m";
+
+    /// <summary>Splits "123 m" → ("123", "m") and "1.23 km" → ("1.23", "km").</summary>
+    private static (string value, string unit) SplitDistance(string text)
+    {
+        if (text == "—") return ("—", "");
+        var idx = text.LastIndexOf(' ');
+        return idx > 0 ? (text[..idx], text[(idx + 1)..]) : (text, "");
+    }
 
     // ── Cleanup ──────────────────────────────────────────────────────────
     public async ValueTask DisposeAsync()
