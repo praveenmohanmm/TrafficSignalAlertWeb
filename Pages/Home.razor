@@ -155,11 +155,23 @@
 
     /// <summary>
     /// Signals that have already fired their alert this session.
-    /// Each ObjectId appears at most once — no repeat audio or visual alert
-    /// for the same physical location until tracking is restarted.
+    /// A signal is removed only when it exits the clear zone (alert radius + 50 m
+    /// hysteresis), preventing GPS jitter at the boundary from re-triggering alerts.
     /// </summary>
     private readonly HashSet<int> _alertedSignalIds = [];
-    private int _alertsFired;
+    private int  _alertsFired;
+
+    /// <summary>
+    /// Re-entrancy guard: rapid GPS updates can queue multiple proximity checks.
+    /// We drop any update that arrives while one is already in-flight.
+    /// </summary>
+    private bool _isUpdatingProximity;
+
+    /// <summary>
+    /// Extra distance (metres) beyond the alert radius a signal must travel before
+    /// it becomes alertable again. Prevents GPS jitter from double-firing.
+    /// </summary>
+    private const double ClearHysteresisM = 50.0;
 
     private double SpeedKmh => _speedMs * 3.6;
     /// <summary>Null when speed is outside the configured alertable range.</summary>
@@ -212,8 +224,9 @@
         _alertLines    = [];
         _nearbySignals = [];
         _alertedSignalIds.Clear();
-        _alertsFired = 0;
-        _statusMessage = "Tracking stopped.";
+        _alertsFired          = 0;
+        _isUpdatingProximity  = false;
+        _statusMessage        = "Tracking stopped.";
         StateHasChanged();
     }
 
@@ -251,66 +264,84 @@
     // ── Proximity logic ──────────────────────────────────────────────────
     private async Task UpdateProximityAsync(double lat, double lon)
     {
-        var radius = AlertRadius;
+        // Drop this update if a previous one is still in-flight.
+        // GPS fires at 2-3 Hz; skipping one frame (≤500 ms) is imperceptible
+        // and prevents two concurrent calls both seeing a signal as unalerted.
+        if (_isUpdatingProximity) return;
+        _isUpdatingProximity = true;
 
-        var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
-        if (closest is not null)
+        try
         {
-            _closestSignalText   = $"{closest.IntersectionName}  [{closest.IntersectionType}]";
-            _closestDistanceText = FormatDistance(closestDist);
+            var radius = AlertRadius;
+
+            var (closest, closestDist) = await SignalService.GetClosestSignalAsync(lat, lon);
+            if (closest is not null)
+            {
+                _closestSignalText   = $"{closest.IntersectionName}  [{closest.IntersectionType}]";
+                _closestDistanceText = FormatDistance(closestDist);
+            }
+
+            // Suppress all alerts when speed is outside the configured range
+            if (radius is null)
+            {
+                _isAlertActive = false;
+                _alertLines    = [];
+                _nearbySignals = [];
+                return;
+            }
+
+            // Fetch signals within the CLEAR zone (alert radius + hysteresis).
+            // Alerted IDs are only expired when a signal leaves this larger zone,
+            // so GPS jitter at the radius boundary cannot re-trigger the alert.
+            var clearRadius = radius.Value + ClearHysteresisM;
+            var inClearZone = await SignalService.GetNearbySignalsAsync(lat, lon, clearRadius);
+
+            // Filter to the true alert radius for alerting purposes
+            var nearby = inClearZone
+                .Where(n => n.DistanceMetres <= radius.Value)
+                .ToList();
+
+            // Expire alerted IDs only when the signal is fully outside the clear zone
+            var inClearZoneIds = inClearZone.Select(n => n.Signal.ObjectId).ToHashSet();
+            _alertedSignalIds.IntersectWith(inClearZoneIds);
+
+            // Signals within alert radius that haven't been alerted yet this approach
+            var unalerted = nearby
+                .Where(n => !_alertedSignalIds.Contains(n.Signal.ObjectId))
+                .ToList();
+
+            _nearbySignals = unalerted;
+
+            if (unalerted.Count > 0)
+            {
+                var first = unalerted[0];
+
+                _isAlertActive = true;
+                _alertClass    = first.DistanceMetres <= 30 ? "tsa-alert--red"
+                               : first.DistanceMetres <= 60 ? "tsa-alert--orange"
+                                                            : "tsa-alert--green";
+                _alertLines =
+                [
+                    first.Signal.IntersectionName,
+                    first.Signal.IntersectionType,
+                    $"{FormatDistance(first.DistanceMetres)} away"
+                ];
+
+                // Add to alerted set BEFORE awaiting the audio call so no
+                // concurrent update can slip through and double-fire.
+                _alertedSignalIds.Add(first.Signal.ObjectId);
+                _alertsFired++;
+                await JS.InvokeVoidAsync("trafficAudio.play", SettingsService.Settings.AlertTone);
+            }
+            else
+            {
+                _isAlertActive = false;
+                _alertLines    = [];
+            }
         }
-
-        // Suppress all alerts when speed is outside the 17–100 km/h window
-        if (radius is null)
+        finally
         {
-            _isAlertActive = false;
-            _alertLines    = [];
-            _nearbySignals = [];
-            return;
-        }
-
-        var nearby = await SignalService.GetNearbySignalsAsync(lat, lon, radius.Value);
-
-        // Expire alerted IDs for signals that have left the alert radius.
-        // This lets the same signal alert again on the next approach
-        // while still suppressing repeat alerts during the current approach.
-        var nearbyIds = nearby.Select(n => n.Signal.ObjectId).ToHashSet();
-        _alertedSignalIds.IntersectWith(nearbyIds);
-
-        // Keep only signals that have NOT been alerted on this approach.
-        var unalerted = nearby
-            .Where(n => !_alertedSignalIds.Contains(n.Signal.ObjectId))
-            .ToList();
-
-        _nearbySignals = unalerted;
-
-        if (unalerted.Count > 0)
-        {
-            // Alert for the closest unalerted signal
-            var first = unalerted[0];
-
-            _isAlertActive = true;
-            _alertClass    = first.DistanceMetres <= 30 ? "tsa-alert--red"
-                           : first.DistanceMetres <= 60 ? "tsa-alert--orange"
-                                                        : "tsa-alert--green";
-            _alertLines =
-            [
-                first.Signal.IntersectionName,
-                first.Signal.IntersectionType,
-                $"{FormatDistance(first.DistanceMetres)} away"
-            ];
-
-            // Mark as alerted BEFORE playing sound so a re-entrant GPS update
-            // cannot fire a second beep for the same signal.
-            _alertedSignalIds.Add(first.Signal.ObjectId);
-            _alertsFired++;
-            await JS.InvokeVoidAsync("trafficAudio.play", SettingsService.Settings.AlertTone);
-        }
-        else
-        {
-            // All signals within radius have already been alerted — clear banner
-            _isAlertActive = false;
-            _alertLines    = [];
+            _isUpdatingProximity = false;
         }
     }
 
