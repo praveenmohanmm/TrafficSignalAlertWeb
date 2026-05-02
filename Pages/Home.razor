@@ -25,14 +25,6 @@
         </div>
     </div>
 
-    <!-- ── Tap-for-audio banner (iOS auto-start: audio suspended until first touch) -->
-    @if (GeoService.IsTracking && !_audioUnlocked)
-    {
-        <div class="tsa-paused-banner" style="cursor:pointer" @onclick="TapToUnlockAudioAsync">
-            <span>🔇 Tap here to enable audio alerts</span>
-        </div>
-    }
-
     <!-- ── Out-of-range banner (alerts silenced) ──────────────────────── -->
     @if (GeoService.IsTracking && AlertRadius is null && !string.IsNullOrEmpty(_speedText))
     {

@@ -39,6 +39,23 @@ window.trafficAudio = (function () {
         osc.start();                // runs until the page unloads
     }
 
+    /* Silent fallback for older iOS: resume AudioContext on first touch.
+       No UI banner — any natural screen interaction triggers it. */
+    function _audioTouchFallback(dotNetRef) {
+        console.log('[TSA] autoUnlock: waiting for first touch (older iOS fallback)');
+        const handler = function () {
+            if (_ctx) {
+                _ctx.resume().then(function () {
+                    console.log('[TSA] touch fallback: state=' + _ctx.state);
+                    if (_ctx.state === 'running' && dotNetRef)
+                        dotNetRef.invokeMethodAsync('OnAudioUnlocked');
+                }).catch(function () {});
+            }
+        };
+        document.addEventListener('touchstart', handler, { once: true, passive: true });
+        document.addEventListener('click',      handler, { once: true });
+    }
+
     // Re-resume after switching apps and back
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible' && _ctx && _ctx.state !== 'running')
@@ -58,41 +75,44 @@ window.trafficAudio = (function () {
             } catch (e) { console.warn('[TSA] unlock failed:', e); }
         },
 
-        /* autoUnlock — called on page load (no user gesture available).
-           On Android/Chrome the AudioContext usually starts 'running' right
-           away.  On iOS Safari it starts 'suspended'; a one-time touch/click
-           listener resumes it and notifies Blazor via dotNetRef so the
-           "tap for audio" banner can be dismissed. */
+        /* autoUnlock — called on page load (no explicit user gesture).
+           Strategy:
+           1. Create the AudioContext immediately.
+           2. Call resume() straight away — on Android it's already 'running';
+              on iOS 15+ PWA the home-screen launch tap counts as a user
+              activation so resume() resolves immediately too.
+           3. If resume() doesn't result in 'running' (older iOS / browser),
+              fall back to a silent one-time touch listener so the context
+              unlocks on the user's first natural screen interaction. */
         autoUnlock: function (dotNetRef) {
-            // Try to create the context immediately (works on Android)
             if (!_ctx) {
                 try {
                     _ctx = new (window.AudioContext || window.webkitAudioContext)();
                     _keepAlive();
-                    console.log('[TSA] autoUnlock: ctx state=' + _ctx.state);
-                } catch (e) { console.warn('[TSA] autoUnlock create failed:', e); }
+                    console.log('[TSA] autoUnlock: created, state=' + _ctx.state);
+                } catch (e) { console.warn('[TSA] autoUnlock create failed:', e); return; }
             }
 
-            // If already running, notify Blazor straight away
-            if (_ctx && _ctx.state === 'running') {
+            // Already running (e.g. Android, or called twice) — done immediately
+            if (_ctx.state === 'running') {
+                console.log('[TSA] autoUnlock: already running');
                 if (dotNetRef) dotNetRef.invokeMethodAsync('OnAudioUnlocked');
                 return;
             }
 
-            // iOS: resume on first user interaction, then notify Blazor
-            const handler = function () {
-                if (_ctx) {
-                    _ctx.resume().then(function () {
-                        console.log('[TSA] autoUnlock resumed: ctx state=' + _ctx.state);
-                        if (dotNetRef) dotNetRef.invokeMethodAsync('OnAudioUnlocked');
-                    }).catch(function (e) { console.warn('[TSA] resume failed:', e); });
+            // Attempt immediate resume — succeeds on iOS 15+ PWA launched from
+            // home screen because the launch tap is a valid user activation.
+            _ctx.resume().then(function () {
+                console.log('[TSA] autoUnlock: resume resolved, state=' + _ctx.state);
+                if (_ctx.state === 'running') {
+                    if (dotNetRef) dotNetRef.invokeMethodAsync('OnAudioUnlocked');
+                    return;
                 }
-                document.removeEventListener('touchstart', handler);
-                document.removeEventListener('click',      handler);
-            };
-            document.addEventListener('touchstart', handler, { once: true, passive: true });
-            document.addEventListener('click',      handler, { once: true });
-            console.log('[TSA] autoUnlock: waiting for first touch to resume');
+                // Resume didn't flip to 'running' (older iOS) — silent touch fallback
+                _audioTouchFallback(dotNetRef);
+            }).catch(function () {
+                _audioTouchFallback(dotNetRef);
+            });
         },
 
         /* play — schedules the tone on the already-running shared context.
