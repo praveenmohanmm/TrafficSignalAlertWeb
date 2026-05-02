@@ -123,7 +123,7 @@
 
     <!-- ── Controls ─────────────────────────────────────────────────────── -->
     <div class="tsa-controls">
-        <button class="tsa-btn tsa-btn--start" @onclick="StartAsync" disabled="@GeoService.IsTracking">
+        <button class="tsa-btn tsa-btn--start" @onclick="() => StartAsync()" disabled="@GeoService.IsTracking">
             ▶ Start Tracking
         </button>
         <button class="tsa-btn tsa-btn--stop" @onclick="StopAsync" disabled="@(!GeoService.IsTracking)">
@@ -147,10 +147,7 @@
     private IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)> _nearbySignals = [];
     private int  _signalsLoaded;
 
-    // ── Auto-start & audio unlock ────────────────────────────────────────
-    /// <summary>True once the AudioContext is confirmed running.
-    /// On Android this is set immediately; on iOS it waits for first touch.</summary>
-    private bool _audioUnlocked;
+    // ── Auto-start ───────────────────────────────────────────────────────
     private DotNetObjectReference<Home>? _selfRef;
 
     // ── Motion & audio state ─────────────────────────────────────────────
@@ -204,19 +201,7 @@
 
     /// <summary>Called by JS once the AudioContext transitions to 'running'.</summary>
     [JSInvokable]
-    public void OnAudioUnlocked()
-    {
-        _audioUnlocked = true;
-        _ = InvokeAsync(StateHasChanged);
-    }
-
-    /// <summary>Handles tap on the "tap here to enable audio" banner.</summary>
-    private async Task TapToUnlockAudioAsync()
-    {
-        await JS.InvokeVoidAsync("trafficAudio.unlock");
-        _audioUnlocked = true;
-        StateHasChanged();
-    }
+    public void OnAudioUnlocked() => _ = InvokeAsync(StateHasChanged);
 
     // ── Button handlers ──────────────────────────────────────────────────
 
@@ -240,7 +225,6 @@
         {
             // User tapped the button — gesture is available, unlock directly.
             await JS.InvokeVoidAsync("trafficAudio.unlock");
-            _audioUnlocked = true;
         }
 
         // Keep screen on so the browser doesn't suspend GPS
@@ -274,7 +258,6 @@
         _alertedSignalIds.Clear();
         _alertsFired          = 0;
         _isUpdatingProximity  = false;
-        _audioUnlocked        = false;
         _statusMessage        = "Tracking stopped.";
         StateHasChanged();
     }
