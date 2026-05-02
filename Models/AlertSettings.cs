@@ -17,7 +17,7 @@ public class AlertSettings
     public double SpeedBreak4Kmh { get; set; } = 70;   // band 4 → 5
 
     // Alert radii per band (metres)
-    public double RadiusBand1M   { get; set; } = 30;   // 17–30 km/h
+    public double RadiusBand1M   { get; set; } = 40;   // 17–30 km/h
     public double RadiusBand2M   { get; set; } = 50;   // 30–50 km/h
     public double RadiusBand3M   { get; set; } = 90;   // 50–60 km/h
     public double RadiusBand4M   { get; set; } = 100;  // 60–70 km/h
