@@ -1,5 +1,6 @@
 @page "/"
 @implements IAsyncDisposable
+@using Microsoft.JSInterop
 @inject GeolocationService GeoService
 @inject TrafficSignalService SignalService
 @inject AlertSettingsService SettingsService
@@ -23,6 +24,14 @@
             <span class="tsa-status-dot @(GeoService.IsTracking ? "active" : "")"></span>
         </div>
     </div>
+
+    <!-- ── Tap-for-audio banner (iOS auto-start: audio suspended until first touch) -->
+    @if (GeoService.IsTracking && !_audioUnlocked)
+    {
+        <div class="tsa-paused-banner" style="cursor:pointer" @onclick="TapToUnlockAudioAsync">
+            <span>🔇 Tap here to enable audio alerts</span>
+        </div>
+    }
 
     <!-- ── Out-of-range banner (alerts silenced) ──────────────────────── -->
     @if (GeoService.IsTracking && AlertRadius is null && !string.IsNullOrEmpty(_speedText))
@@ -134,17 +143,23 @@
 
 @code {
     // ── State ────────────────────────────────────────────────────────────
-    private string _positionText      = "Waiting for GPS…";
-    private string _accuracyText      = string.Empty;
-    private string _closestSignalText = "—";
+    private string _positionText        = "Waiting for GPS…";
+    private string _accuracyText        = string.Empty;
+    private string _closestSignalText   = "—";
     private string _closestDistanceText = "—";
-    private string _statusMessage     = "Tap Start to begin tracking.";
+    private string _statusMessage       = "Starting…";
     private bool   _isError;
     private bool   _isAlertActive;
-    private string _alertClass        = string.Empty;
-    private List<string> _alertLines  = [];
+    private string _alertClass          = string.Empty;
+    private List<string> _alertLines    = [];
     private IReadOnlyList<(TrafficSignal Signal, double DistanceMetres)> _nearbySignals = [];
-    private int _signalsLoaded;
+    private int  _signalsLoaded;
+
+    // ── Auto-start & audio unlock ────────────────────────────────────────
+    /// <summary>True once the AudioContext is confirmed running.
+    /// On Android this is set immediately; on iOS it waits for first touch.</summary>
+    private bool _audioUnlocked;
+    private DotNetObjectReference<Home>? _selfRef;
 
     // ── Motion & audio state ─────────────────────────────────────────────
     /// <summary>Minimum speed in m/s to be considered moving (~5 km/h).</summary>
@@ -185,15 +200,56 @@
         GeoService.ErrorOccurred   += OnGeoError;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Auto-start tracking on page load so the app is immediately active
+        // when opened via CarPlay shortcut or home screen tap.
+        _selfRef = DotNetObjectReference.Create(this);
+        await StartAsync(autoStart: true);
+    }
+
+    /// <summary>Called by JS once the AudioContext transitions to 'running'.</summary>
+    [JSInvokable]
+    public void OnAudioUnlocked()
+    {
+        _audioUnlocked = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Handles tap on the "tap here to enable audio" banner.</summary>
+    private async Task TapToUnlockAudioAsync()
+    {
+        await JS.InvokeVoidAsync("trafficAudio.unlock");
+        _audioUnlocked = true;
+        StateHasChanged();
+    }
+
     // ── Button handlers ──────────────────────────────────────────────────
-    private async Task StartAsync()
+
+    // Called by the Start button (autoStart=false) or automatically on
+    // page load (autoStart=true).  The only difference is how audio is
+    // unlocked: a button tap is a user gesture so unlock() works immediately;
+    // a page-load call uses autoUnlock() which falls back to first-touch.
+    private async Task StartAsync(bool autoStart = false)
     {
         _isError = false;
         _statusMessage = "Requesting GPS permission…";
         StateHasChanged();
 
-        // Unlock Web Audio API during this user gesture (required on iOS)
-        await JS.InvokeVoidAsync("trafficAudio.unlock");
+        if (autoStart)
+        {
+            // No user gesture — try immediately (Android) and register a
+            // one-time touch listener as fallback (iOS).
+            await JS.InvokeVoidAsync("trafficAudio.autoUnlock", _selfRef);
+        }
+        else
+        {
+            // User tapped the button — gesture is available, unlock directly.
+            await JS.InvokeVoidAsync("trafficAudio.unlock");
+            _audioUnlocked = true;
+        }
 
         // Keep screen on so the browser doesn't suspend GPS
         await JS.InvokeVoidAsync("wakeLock.request");
@@ -226,6 +282,7 @@
         _alertedSignalIds.Clear();
         _alertsFired          = 0;
         _isUpdatingProximity  = false;
+        _audioUnlocked        = false;
         _statusMessage        = "Tracking stopped.";
         StateHasChanged();
     }
@@ -361,6 +418,7 @@
     {
         GeoService.LocationChanged -= OnLocationChanged;
         GeoService.ErrorOccurred   -= OnGeoError;
+        _selfRef?.Dispose();
         await GeoService.DisposeAsync();
     }
 }

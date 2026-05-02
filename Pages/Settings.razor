@@ -18,49 +18,6 @@
         </div>
     </div>
 
-    <!-- ── Live rules table ───────────────────────────────────────────── -->
-    <div class="tsa-card">
-        <div class="tsa-card-label">Current Rules</div>
-        <table class="tsa-table">
-            <thead>
-                <tr>
-                    <th>Speed</th>
-                    <th>Alert Radius</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr class="tsa-table-muted">
-                    <td>&lt; @S.MinSpeedKmh km/h</td>
-                    <td>No alerts</td>
-                </tr>
-                <tr>
-                    <td>@S.MinSpeedKmh – @S.SpeedBreak1Kmh km/h</td>
-                    <td>@S.RadiusBand1M m</td>
-                </tr>
-                <tr>
-                    <td>@S.SpeedBreak1Kmh – @S.SpeedBreak2Kmh km/h</td>
-                    <td>@S.RadiusBand2M m</td>
-                </tr>
-                <tr>
-                    <td>@S.SpeedBreak2Kmh – @S.SpeedBreak3Kmh km/h</td>
-                    <td>@S.RadiusBand3M m</td>
-                </tr>
-                <tr>
-                    <td>@S.SpeedBreak3Kmh – @S.SpeedBreak4Kmh km/h</td>
-                    <td>@S.RadiusBand4M m</td>
-                </tr>
-                <tr>
-                    <td>@S.SpeedBreak4Kmh – @S.MaxSpeedKmh km/h</td>
-                    <td>@S.RadiusBand5M m</td>
-                </tr>
-                <tr class="tsa-table-muted">
-                    <td>&gt; @S.MaxSpeedKmh km/h</td>
-                    <td>No alerts</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
     <!-- ── Alert Tone ───────────────────────────────────────────────────── -->
     <div class="tsa-card">
         <div class="tsa-card-label">Alert Tone</div>
@@ -83,71 +40,6 @@
                 </div>
             </div>
         }
-    </div>
-
-    <!-- ── Speed thresholds ───────────────────────────────────────────── -->
-    <div class="tsa-card">
-        <div class="tsa-card-label">Speed Thresholds</div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Min alert speed</span>
-                <span class="tsa-slider-value">@S.MinSpeedKmh km/h</span>
-            </div>
-            <input type="range" min="5" max="25" step="1"
-                   value="@S.MinSpeedKmh"
-                   @oninput="e => SetAndSave(e, v => S.MinSpeedKmh = v)" />
-        </div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Band 1 → 2 break</span>
-                <span class="tsa-slider-value">@S.SpeedBreak1Kmh km/h</span>
-            </div>
-            <input type="range" min="20" max="45" step="1"
-                   value="@S.SpeedBreak1Kmh"
-                   @oninput="e => SetAndSave(e, v => S.SpeedBreak1Kmh = v)" />
-        </div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Band 2 → 3 break</span>
-                <span class="tsa-slider-value">@S.SpeedBreak2Kmh km/h</span>
-            </div>
-            <input type="range" min="30" max="55" step="1"
-                   value="@S.SpeedBreak2Kmh"
-                   @oninput="e => SetAndSave(e, v => S.SpeedBreak2Kmh = v)" />
-        </div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Band 3 → 4 break</span>
-                <span class="tsa-slider-value">@S.SpeedBreak3Kmh km/h</span>
-            </div>
-            <input type="range" min="45" max="65" step="1"
-                   value="@S.SpeedBreak3Kmh"
-                   @oninput="e => SetAndSave(e, v => S.SpeedBreak3Kmh = v)" />
-        </div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Band 4 → 5 break</span>
-                <span class="tsa-slider-value">@S.SpeedBreak4Kmh km/h</span>
-            </div>
-            <input type="range" min="55" max="90" step="1"
-                   value="@S.SpeedBreak4Kmh"
-                   @oninput="e => SetAndSave(e, v => S.SpeedBreak4Kmh = v)" />
-        </div>
-
-        <div class="tsa-slider-row">
-            <div class="tsa-slider-label">
-                <span>Max alert speed</span>
-                <span class="tsa-slider-value">@S.MaxSpeedKmh km/h</span>
-            </div>
-            <input type="range" min="80" max="200" step="5"
-                   value="@S.MaxSpeedKmh"
-                   @oninput="e => SetAndSave(e, v => S.MaxSpeedKmh = v)" />
-        </div>
     </div>
 
     <!-- ── Alert radii ────────────────────────────────────────────────── -->
